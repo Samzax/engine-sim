@@ -38,6 +38,9 @@ Debug and packaged Release passed on the development PC on 2026-09-08. This exer
 graphics and audio initialization and the rendering loop. The Release frame
 export was inspected for the engine drawing, gauges and labels; it also exposed
 and verified a fix for the long reload-error message overflowing its panel.
+An additional run with the bundled odd-fire V6 reproduced overlapping engine
+name and displacement labels; the exported frame verified that the labels now
+fit together with spacing.
 This does not verify user interaction or audible output. An off-screen swap chain can
 be occluded. Failed Direct3D Present calls now propagate to the application's
 frame check and log their HRESULT (plus the removal reason for a reset or removed

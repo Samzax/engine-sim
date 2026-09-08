@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 InfoCluster::InfoCluster() {
     m_engine = nullptr;
@@ -68,13 +69,6 @@ void InfoCluster::render() {
     const Bounds engineInfoBounds = grid.get(m_bounds, 0, 2, 6, 1);
     drawFrame(engineInfoBounds, 1.0f, m_app->getForegroundColor(), m_app->getBackgroundColor());
 
-    drawAlignedText(
-        (m_engine != nullptr) ? m_engine->getName() : "<NO ENGINE>",
-        engineInfoBounds.inset(10.0f),
-        24.0f,
-        Bounds::lm,
-        Bounds::lm);
-
     std::stringstream ss;
     if (m_engine != nullptr) {
         ss << std::fixed;
@@ -92,10 +86,21 @@ void InfoCluster::render() {
         ss << "N/A";
     }
 
+    const std::string engineName = m_engine != nullptr ? m_engine->getName() : "<NO ENGINE>";
+    const std::string displacement = ss.str();
+    const Bounds engineTextBounds = engineInfoBounds.inset(10.0f);
+    float engineTextSize = 24.0f;
+    const float combinedWidth = m_app->getTextRenderer()->CalculateWidth(engineName, engineTextSize)
+        + m_app->getTextRenderer()->CalculateWidth(displacement, engineTextSize);
+    const float availableWidth = (std::max)(0.0f, engineTextBounds.width() - 20.0f);
+    if (combinedWidth > availableWidth && combinedWidth > 0)
+        engineTextSize *= availableWidth / combinedWidth;
+
+    drawAlignedText(engineName, engineTextBounds, engineTextSize, Bounds::lm, Bounds::lm);
     drawAlignedText(
-        ss.str(),
-        engineInfoBounds.inset(10.0f),
-        24.0f,
+        displacement,
+        engineTextBounds,
+        engineTextSize,
         Bounds::rm,
         Bounds::rm);
 
