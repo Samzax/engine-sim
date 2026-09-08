@@ -6,6 +6,7 @@
 #include "../include/engine_sim_application.h"
 
 #include <sstream>
+#include <cmath>
 
 MixerCluster::MixerCluster() {
     m_volumeGauge = nullptr,
@@ -166,9 +167,13 @@ void MixerCluster::render() {
     m_noise1Gauge->m_gauge->m_value = (float)parameters.inputSampleNoise * 100.0f;
 
     const double gain = m_simulator->synthesizer().getLevelerGain();
+    const double gainRange = parameters.levelerMaxGain - parameters.levelerMinGain;
     m_levelerGauge->m_bounds = grid.get(m_bounds, 5, 0);
     m_levelerGauge->m_gauge->m_value =
-        100.0f * (float)((gain - parameters.levelerMinGain) / parameters.levelerMaxGain);
+        (gainRange > 0.0)
+        ? 100.0f * static_cast<float>(std::fmax(0.0,
+            std::fmin(1.0, (gain - parameters.levelerMinGain) / gainRange)))
+        : 0.0f;
 
     UiElement::render();
 }
