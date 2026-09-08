@@ -30,6 +30,8 @@ void UiManager::update(float dt) {
 
     if (!m_app->getEngine()->GetGameWindow()->IsActive()) {
         // Focus loss cancels a drag; it must not generate a click on release.
+        if (m_dragStart != nullptr)
+            m_dragStart->onMouseUp(m_dragStart->worldToLocal(m_mouse_p0));
         m_dragStart = nullptr;
         if (m_hover != nullptr) m_hover->onMouseLeave();
         m_hover = nullptr;
@@ -59,7 +61,7 @@ void UiManager::update(float dt) {
     else if (m_app->getEngine()->ProcessMouseButtonUp(ysMouse::Button::Left)) {
         UiElement *dragRelease = m_hover;
 
-        if (m_dragStart != nullptr) m_dragStart->onMouseUp(mousePos);
+        if (m_dragStart != nullptr) m_dragStart->onMouseUp(m_dragStart->worldToLocal(mousePos));
 
         if (dragRelease != nullptr && m_dragStart == dragRelease) {
             m_dragStart->onMouseClick(m_dragStart->worldToLocal(mousePos));
@@ -70,6 +72,8 @@ void UiManager::update(float dt) {
     else if (!m_app->getEngine()->IsMouseButtonDown(ysMouse::Button::Left)) {
         // Focus can leave and return between updates, clearing the button
         // without an UpTransition. Cancel that drag without generating a click.
+        if (m_dragStart != nullptr)
+            m_dragStart->onMouseUp(m_dragStart->worldToLocal(mousePos));
         m_dragStart = nullptr;
     }
 
