@@ -36,12 +36,14 @@ The UI is extremely minimalistic and there are only a few controls used to inter
 | :---: | :---: |
 | A | Toggle ignition |
 | S | Hold for starter |
-| D | Enable dyno |
-| H | Enable RPM hold (see below for instructions) |
+| D | Toggle dyno |
+| H | Toggle RPM hold (see below for instructions) |
 | G + Scroll | Change hold speed |
-| F | Enter fullscreen mode |
+| F | Toggle fullscreen mode |
 | I | Display dyno stats in the information panel |
 | Shift | Clutch (hold spacebar at the same time to slowly engage/disengage) |
+| T / U | Gradually disengage / engage the clutch |
+| Y | Hold the current clutch target after releasing T or U |
 | Up Arrow | Up Gear | 
 | Down Arrow | Down Gear | 
 | Z + Scroll | Volume |
@@ -55,10 +57,23 @@ The UI is extremely minimalistic and there are only a few controls used to inter
 | Enter | Reload engine script |
 | Home | Fit the engine in the view without restarting it |
 | Escape | Exit the program |
-| Q, W, E, R | Change throttle position |
-| Space + Scroll | Fine throttle adjustment |
+| Q, W, E, R | Hold for 1%, 10%, 20%, or 100% speed-control input |
+| Space + Scroll | Adjust speed-control input; keep Space held to retain it |
+| Mouse drag / Scroll over engine | Pan / zoom the engine view |
+| Insert | Start or stop video recording in a video-enabled build |
 | 1, 2, 3, 4, 5 | Simulation time warp |
 | Tab | Change screen |
+
+Speed-control input follows the engine script's throttle curve or governor; it
+does not necessarily equal throttle plate opening. Without a preset key or
+Space held, the input returns to zero. Space also makes the audio and simulation
+frequency wheel controls finer. Release Shift to engage the clutch; hold Space
+during release for gradual engagement. For a manually adjusted clutch target,
+keep Y held while releasing T or U, otherwise the target returns to fully engaged.
+
+Video files are saved under `video_capture` in the working directory. Earlier
+recordings are preserved with numbered filenames. See the
+[recording notes](docs/portable-release.md) for build requirements.
 
 ### Using the RPM hold
 The RPM hold feature will hold the engine at a specific RPM and also measure the engine's horsepower and torque at that RPM. You can enable RPM hold by pressing the `H` key. **You must then enable the dynomometer** (press the `D` key) in order for the RPM hold to take effect. To change the hold speed, hold the `G` key and scroll with the mouse wheel. The RPM hold will be shown on the `DYNO. SPEED` gauge in the lower left of the screen.
