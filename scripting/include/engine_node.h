@@ -62,6 +62,9 @@ namespace es_script {
                     rod = rods.at(rod)->getRod();
                 }
             }
+            const std::set<CylinderBankNode *> banks(m_cylinderBanks.begin(), m_cylinderBanks.end());
+            if (!m_ignitionModule->connectionsBelongTo(banks))
+                return "Ignition wire connects to a cylinder bank outside this engine";
             return {};
         }
 

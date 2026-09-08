@@ -23,6 +23,15 @@ namespace es_script {
         IgnitionModuleNode() { /* void */ }
         virtual ~IgnitionModuleNode() { /* void */ }
 
+        bool connectionsBelongTo(const std::set<CylinderBankNode *> &banks) const {
+            for (const Post &post : m_posts) {
+                for (const auto &connection : post.wire->getConnections()) {
+                    if (banks.count(connection.first) == 0) return false;
+                }
+            }
+            return true;
+        }
+
         void generate(Engine *engine, EngineContext *context) const {
             IgnitionModule::Parameters params;
             params.crankshaft = engine->getCrankshaft(0);
