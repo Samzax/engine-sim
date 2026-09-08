@@ -95,6 +95,30 @@ TEST(SimulatorRegression, InvalidEngineRejectedBeforeSimulatorInitialization) {
     engine.destroy();
 }
 
+TEST(SimulatorRegression, ExhaustOxygenDoesNotRequireUnburnedFuel) {
+    Engine engine;
+    Engine::Parameters params{};
+    params.exhaustSystemCount = 1;
+    engine.initialize(params);
+    GasSystem &gas = *engine.getExhaustSystem(0)->getSystem();
+    GasSystem::Mix mix{};
+    mix.p_fuel = 0;
+    mix.p_o2 = 1;
+    mix.p_inert = 0;
+    gas.initialize(units::atm, units::L, 300, mix);
+    EXPECT_DOUBLE_EQ(engine.getExhaustO2(), 1.0);
+    mix.p_o2 = mix.p_inert = 0.5;
+    gas.changeMix(mix);
+    EXPECT_NEAR(engine.getExhaustO2(), 0.5332, 0.0001);
+    mix.p_o2 = 0;
+    mix.p_inert = 1;
+    gas.changeMix(mix);
+    EXPECT_DOUBLE_EQ(engine.getExhaustO2(), 0.0);
+    gas.setN(0);
+    EXPECT_DOUBLE_EQ(engine.getExhaustO2(), 0.0);
+    engine.destroy();
+}
+
 TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
     for (const char *path : {"test/scripts/hayabusa.mr", "test/scripts/ferrari_v12.mr"}) {
         es_script::Compiler compiler;

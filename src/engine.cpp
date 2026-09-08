@@ -361,15 +361,10 @@ double Engine::getExhaustO2() const {
     constexpr double oxygenMolarMass = units::mass(31.9988, units::g);
     constexpr double nitrogenMolarMass = units::mass(28.014, units::g);
 
-    if (totalFuel == 0) return 0;
-    else {
-        return
-            (oxygenMolarMass * totalOxygen)
-            / (
-                totalFuel * octaneMolarMass
-                + nitrogenMolarMass * totalInert
-                + oxygenMolarMass * totalOxygen);
-    }
+    const double totalMass = totalFuel * octaneMolarMass
+        + nitrogenMolarMass * totalInert
+        + oxygenMolarMass * totalOxygen;
+    return totalMass > 0 ? oxygenMolarMass * totalOxygen / totalMass : 0;
 }
 
 void Engine::resetFuelConsumption() {
