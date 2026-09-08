@@ -440,7 +440,8 @@ namespace es_script {
             readAllInputs();
 
             const double angle = m_durationAt50Thou / 4;
-            const double s = std::pow(2 * units::distance(50, units::thou) / m_lift, 1 / m_gamma) - 1;
+            // Invert lift * ((1 + cos(k * angle)) / 2)^gamma at 0.050 inch.
+            const double s = 2 * std::pow(units::distance(50, units::thou) / m_lift, 1 / m_gamma) - 1;
             const double k = std::acos(s) / angle;
             const double extents = constants::pi / k;
 

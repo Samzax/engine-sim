@@ -160,6 +160,27 @@ TEST(SimulatorRegression, InvalidCurveStopsScriptBeforeEngineCreation) {
     EXPECT_NE(message.find("Function samples must have finite coordinates and values"), std::string::npos);
 }
 
+TEST(SimulatorRegression, HayabusaCamDurationMatchesFiftyThouLift) {
+    es_script::Compiler compiler;
+    compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/es");
+    const bool compiled = compiler.compile(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/test/scripts/hayabusa.mr");
+    if (!compiled) { compiler.destroy(); FAIL() << "Could not compile Hayabusa"; }
+    EngineOwner owner;
+    owner.output = compiler.execute();
+    compiler.destroy();
+    ASSERT_TRUE(owner.output.success);
+    CylinderHead *head = owner.output.engine->getHead(0);
+    // The script specifies 240/220 crank degrees at 0.050-inch lift,
+    // with gamma 1.2. Each cam turns at half crank speed.
+    for (const auto &lobe : {std::make_pair(head->getIntakeCamshaft(), 240.0),
+            std::make_pair(head->getExhaustCamshaft(), 220.0)}) {
+        const double angle = units::angle(lobe.second / 4, units::deg);
+        for (double side : {-1.0, 1.0}) {
+            EXPECT_NEAR(lobe.first->sampleLobe(side * angle) / units::thou, 50.0, 0.05);
+        }
+    }
+}
+
 TEST(SimulatorRegression, RadialDisplacementMatchesPistonTravel) {
     es_script::Compiler compiler;
     compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/es");

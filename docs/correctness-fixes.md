@@ -178,3 +178,14 @@ builds reject recording dimensions when either dimension is nonpositive, and
 start/stop calls guard against repeated transitions. The normal Release build
 and video-enabled syntax compilation both passed; the shortcut was not exercised
 through keyboard input.
+
+### Harmonic cam duration
+
+The harmonic-lobe generator now inverts its lift equation with the factor of
+two outside the gamma exponent. Previously, profiles with gamma other than
+one did not match their `duration_at_50_thou` setting. The bundled Hayabusa's
+intake and exhaust profiles produced about 0.04354 inches at their specified
+0.050-inch timing points. A regression using the compiled engine now verifies
+both opening and closing points within 0.00005 inches, allowing for sampled
+curve interpolation. This correction changes valve timing and may affect
+performance and sound for existing profiles with gamma other than one.
