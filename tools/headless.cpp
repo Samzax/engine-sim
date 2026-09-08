@@ -98,6 +98,11 @@ int main(int argc, char **argv) {
             || !std::isfinite(throttle) || throttle < 0 || throttle > 1) {
             throw std::invalid_argument("Starter duration must be within the run; throttle must be 0..1");
         }
+        if (argc > 6) {
+            std::error_code pathError;
+            if (std::filesystem::equivalent(argv[1], argv[6], pathError))
+                throw std::invalid_argument("Output WAV must not overwrite the input engine script");
+        }
         ScriptOwner script;
         es_script::Compiler compiler;
         compiler.initialize(std::filesystem::absolute(argv[2]).string());

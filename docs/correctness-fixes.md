@@ -497,3 +497,10 @@ its existing parameter snapshot, rather than reassigned for every sample. A
 byte-identical WAV files before and after, including 88553 samples. The existing
 audio regression executable and Release builds passed. These checks establish
 output preservation for that run, not a measured overall performance increase.
+
+The headless recorder now rejects a WAV output path referring to its input
+engine script, using filesystem identity rather than path spelling. A copied
+Honda script previously became a RIFF file when passed as both input and output.
+After the fix, `main.mr` versus `./main.mr` is rejected and the script hash stays
+unchanged; recording to a separate WAV still succeeds. The Release headless
+build passed. This protects the selected input script, not every imported asset.
