@@ -96,8 +96,8 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     dbasic::Path modulePath = dbasic::GetModulePath();
     dbasic::Path confPath = modulePath.Append("delta.conf");
 
-    std::string enginePath = "../dependencies/submodules/delta-studio/engines/basic";
-    m_assetPath = "../assets";
+    std::string enginePath = modulePath.Append("engine").ToString();
+    m_assetPath = modulePath.Append("assets").ToString();
     if (confPath.Exists()) {
         std::fstream confFile(confPath.ToString(), std::ios::in);
 
@@ -648,8 +648,8 @@ void EngineSimApplication::loadScript() {
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
     es_script::Compiler compiler;
-    compiler.initialize();
-    const bool compiled = compiler.compile("../assets/main.mr");
+    compiler.initialize(dbasic::Path(m_assetPath).Append("../es").ToString());
+    const bool compiled = compiler.compile(m_assetPath + "/main.mr");
     if (compiled) {
         const es_script::Compiler::Output output = compiler.execute();
         settings = output.applicationSettings;

@@ -17,8 +17,8 @@ struct EngineOwner {
 TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
     for (const char *path : {"test/scripts/hayabusa.mr", "test/scripts/ferrari_v12.mr"}) {
         es_script::Compiler compiler;
-        compiler.initialize();
-        const bool compiled = compiler.compile(path);
+        compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/es");
+        const bool compiled = compiler.compile(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/" + path);
         if (!compiled) {
             compiler.destroy();
             FAIL() << "Compilation failed: " << path << "; see error_log.log";
@@ -50,8 +50,8 @@ TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
 
 TEST(SimulatorRegression, ExecutionDoesNotReturnPreviousOutput) {
     es_script::Compiler compiler;
-    compiler.initialize();
-    const bool compiled = compiler.compile("test/scripts/no_engine.mr");
+    compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/es");
+    const bool compiled = compiler.compile(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/test/scripts/no_engine.mr");
     if (!compiled) { compiler.destroy(); FAIL() << "Could not compile empty script"; }
     Engine previous;
     es_script::Compiler::output()->engine = &previous;

@@ -36,6 +36,7 @@ namespace es_script {
                 impulseResponse->initialize(
                     path.toString(),
                     m_volume);
+                context->addImpulseResponse(this, impulseResponse);
 
                 return impulseResponse;
             }

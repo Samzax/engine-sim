@@ -48,3 +48,11 @@ Discord Rich Presence remains available in Release. Debug builds omit it because
 - Windows x64 Debug and Release: application and both project test executables built in each configuration; 29/29 project tests passed in each.
 - WSL GCC: the final portable audio suite passed separately under AddressSanitizer + UndefinedBehaviorSanitizer and ThreadSanitizer, with no sanitizer diagnostics.
 - The Hayabusa/V12 integration checks exercise script compilation, brief simulation, frequency changes, and repeated cleanup. No graphical/audio-device smoke test or remote GitHub Actions run has been performed.
+
+## Portable launch and packaging follow-up
+
+- Application assets default to folders beside the executable; development builds generate an absolute `delta.conf`. Script compilation now uses the configured asset directory and an explicit script-library path.
+- The existing integration checks now execute from the build directory, using absolute fixture/library paths. Debug and Release both passed all 29 checks after this change.
+- Registered generated impulse responses with their engine context so repeated uses share the response and engine cleanup releases it.
+- CPack builds a Release ZIP containing runtime DLLs, assets, scripts, fonts, shaders, and license files. The local archive was generated and its entries checked; the graphical launch check was interrupted by the user and remains unverified.
+- CI runs on fix branches and uploads the Release ZIP. See `portable-release.md` for packaging commands.

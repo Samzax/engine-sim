@@ -32,7 +32,7 @@ namespace es_script {
 
         static Output *output();
 
-        void initialize();
+        void initialize(const std::string &libraryPath = "");
         bool compile(const piranha::IrPath &path);
         Output execute();
         void destroy();

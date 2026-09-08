@@ -315,6 +315,7 @@ target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
 add_subdirectory(dependencies)
+include(cmake/WindowsPackage.cmake)
 
 # GTEST
 
@@ -335,7 +336,8 @@ target_link_libraries(engine-sim-test
 include(GoogleTest)
 if (PIRANHA_ENABLED)
     target_sources(engine-sim-test PRIVATE test/simulator_regression_tests.cpp)
+    target_compile_definitions(engine-sim-test PRIVATE ENGINE_SIM_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     target_link_libraries(engine-sim-test engine-sim-script-interpreter)
 endif()
-gtest_discover_tests(engine-sim-test WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+gtest_discover_tests(engine-sim-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
