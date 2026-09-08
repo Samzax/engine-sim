@@ -18,6 +18,7 @@ set_property(TARGET csv-io-test PROPERTY FOLDER "csv-io")
 
 if (DTV)
     add_subdirectory(direct-to-video)
+    include(${PROJECT_SOURCE_DIR}/cmake/VideoCaptureFix.cmake)
 
     set_property(TARGET direct-to-video PROPERTY FOLDER "dtv")
     set_property(TARGET direct-to-video PROPERTY FOLDER "dtv")

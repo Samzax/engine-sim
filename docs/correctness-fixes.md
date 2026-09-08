@@ -112,3 +112,11 @@ submitted it, increasing the queue length beyond its capacity. Encoder or
 readback errors stop recording and report a status message. The video-enabled
 application translation unit passes MSVC syntax checking with the actual
 dependency headers; end-to-end FFmpeg encoding has not been verified.
+
+The pinned video queue also retained its stopped flag when initialized for a
+second recording, causing empty-queue reads to return immediately and the
+encoder worker to spin. `cmake/VideoCaptureFix.cmake` resets this flag in a
+generated source copy when video capture is enabled. A standalone check using
+the dependency's actual queue reproduced the failure on the second recording;
+the patched queue waited for and delivered frames on both recordings. This
+checks queue restart behavior independently of FFmpeg or the desktop.
