@@ -28,6 +28,25 @@ if (_graphics_match EQUAL -1)
     message(FATAL_ERROR "Delta graphics source changed; review cmake/DeltaGraphicsFix.cmake")
 endif()
 string(REPLACE "${_creation_end}" "${_creation_retry}" _graphics_code "${_graphics_code}")
+set(_present_call "    context->m_swapChain->Present(1, 0);")
+set(_checked_present [=[    const HRESULT presentResult = context->m_swapChain->Present(1, 0);
+    if (FAILED(presentResult)) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Direct3D Present failed: HRESULT 0x" << std::hex
+            << static_cast<unsigned long>(presentResult);
+        if (presentResult == DXGI_ERROR_DEVICE_REMOVED || presentResult == DXGI_ERROR_DEVICE_RESET) {
+            log << "; device removal reason 0x"
+                << static_cast<unsigned long>(m_device->GetDeviceRemovedReason());
+        }
+        log << '\n';
+        return YDS_ERROR_RETURN(ysError::ApiError);
+    }]=])
+string(FIND "${_graphics_code}" "${_present_call}" _present_match)
+if (_present_match EQUAL -1)
+    message(FATAL_ERROR "Delta Present implementation changed; review cmake/DeltaGraphicsFix.cmake")
+endif()
+string(REPLACE "${_present_call}" "${_checked_present}" _graphics_code "${_graphics_code}")
+string(PREPEND _graphics_code "#include <fstream>\n")
 string(REPLACE "\"../include/" "\"${_graphics_dir}/include/" _graphics_code "${_graphics_code}")
 set(_graphics_patched "${PROJECT_BINARY_DIR}/dependency-fixes/yds_d3d11_device.cpp")
 file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/dependency-fixes")

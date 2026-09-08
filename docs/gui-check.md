@@ -35,7 +35,10 @@ pending marker before initialization. Startup failures are recorded in
 Debug and packaged Release passed on the development PC on 2026-09-08. This exercises real GUI,
 graphics and audio initialization and the rendering loop. It does not verify
 visible pixels, user interaction or audible output. An off-screen swap chain can
-be occluded, and the upstream graphics backend ignores the HRESULT from Present.
+be occluded. Failed Direct3D Present calls now propagate to the application's
+frame check and log their HRESULT (plus the removal reason for a reset or removed
+device). Non-failure statuses such as occlusion remain accepted. Actual device
+removal has not been induced on the development PC.
 
 The original Debug startup failure was traced to HRESULT `0x887A002D`
 (`DXGI_ERROR_SDK_COMPONENT_MISSING`): this PC lacks the optional Direct3D debug

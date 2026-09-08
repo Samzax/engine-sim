@@ -34,13 +34,14 @@ std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
 namespace {
 bool diagnosticErrors = false;
-[[noreturn]] void startupFailure(const std::string &message) {
+[[noreturn]] void startupFailure(const std::string &message, bool duringStartup = true) {
     {
         std::ofstream log("error_log.log", std::ios::app);
-        log << "Startup failed: " << message << '\n';
+        log << (duringStartup ? "Startup failed: " : "Rendering failed: ") << message << '\n';
     }
     if (!diagnosticErrors)
-        MessageBoxA(nullptr, message.c_str(), "Engine Sim - startup failed", MB_OK | MB_ICONERROR);
+        MessageBoxA(nullptr, message.c_str(), duringStartup
+            ? "Engine Sim - startup failed" : "Engine Sim - rendering failed", MB_OK | MB_ICONERROR);
     // DeltaEngine::Destroy and its destructors require complete initialization.
     // Terminate this failed startup without unwinding partially created graphics
     // objects; Windows reclaims the process resources.
@@ -52,6 +53,14 @@ void checkStartup(ysError error, const char *stage) {
         startupFailure(std::string(stage) + " failed (error "
             + std::to_string(static_cast<int>(error)) + ").\n"
             "Check that the complete package was extracted and DirectX 11 is available.");
+    }
+}
+
+void checkFrame(ysError error, const char *stage) {
+    if (error != ysError::None) {
+        startupFailure(std::string(stage) + " failed (error "
+            + std::to_string(static_cast<int>(error))
+            + "). See error_log.log for graphics error details.", false);
     }
 }
 }
@@ -406,7 +415,7 @@ float EngineSimApplication::unitsToPixels(float units) const {
 void EngineSimApplication::run(int maxFrames) {
     int frames = 0;
     while (true) {
-        checkStartup(m_engine.StartFrame(), "Start frame");
+        checkFrame(m_engine.StartFrame(), "Start frame");
 
         if (!m_engine.IsOpen()) break;
         if (m_engine.ProcessKeyDown(ysKey::Code::Escape)) {
@@ -475,7 +484,7 @@ void EngineSimApplication::run(int maxFrames) {
 
         renderScene();
 
-        checkStartup(m_engine.EndFrame(), "Render frame");
+        checkFrame(m_engine.EndFrame(), "Render frame");
         if (maxFrames > 0 && ++frames >= maxFrames) break;
 
         if (isRecording()) {
