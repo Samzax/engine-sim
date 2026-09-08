@@ -446,3 +446,9 @@ script with a 9000 RPM minimum and 1000 RPM maximum previously loaded; it now
 reports the invalid range. Equal 1000 RPM limits still load for a fixed target.
 The Release application/headless builds and all 15 simulator regression checks
 passed. This check uses the existing invalid-engine handling for GUI reloads.
+
+The dyno/clutch panel now calls the base UI cleanup routine. Its empty override
+previously bypassed deletion of four labeled gauges and their four child gauges
+on each dashboard rebuild and shutdown. The ownership path was checked through
+`UiElement::destroy` and `LabeledGauge::destroy`; the Release build and hidden GUI
+successful reload, failed reload preserving the engine, and shutdown passed.

@@ -109,7 +109,7 @@ void LoadSimulationCluster::initialize(EngineSimApplication *app) {
 }
 
 void LoadSimulationCluster::destroy() {
-    /* void */
+    UiElement::destroy();
 }
 
 void LoadSimulationCluster::update(float dt) {
