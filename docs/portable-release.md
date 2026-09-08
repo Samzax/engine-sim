@@ -8,6 +8,10 @@ Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed scripts leave the current engine running;
 details are written to `error_log.log` in the working directory.
 
+The build label and `build-info.txt` identify the Git revision used for the app.
+Include that revision in bug reports. A `dirty` suffix marks a build made with
+local changes; source archives without Git metadata show `unknown`.
+
 The package includes the Microsoft release runtime. A Windows
 x64 PC with DirectX 11 graphics and a working audio output is required.
 

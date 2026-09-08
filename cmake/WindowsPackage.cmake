@@ -36,6 +36,7 @@ install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets" "${PROJECT_SOURCE_DIR}/es" DEST
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/fonts"
     "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/shaders" DESTINATION engine)
 install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION .)
+install(FILES "${PROJECT_BINARY_DIR}/generated/$<CONFIG>/build-info.txt" DESTINATION .)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/portable-release.md" DESTINATION . RENAME README.md)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/headless.md" DESTINATION .)
 foreach(_dependency delta-studio csv-io simple-2d-constraint-solver)

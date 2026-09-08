@@ -1,4 +1,5 @@
 #include "../include/engine_sim_application.h"
+#include "engine_sim_build.h"
 
 #include "../include/piston_object.h"
 #include "../include/connecting_rod_object.h"
@@ -30,7 +31,7 @@
 #include "../dependencies/discord/Discord.h"
 #endif
 
-std::string EngineSimApplication::s_buildVersion = "0.1.12a";
+std::string EngineSimApplication::s_buildVersion = "0.1.12a+" ENGINE_SIM_BUILD_REVISION;
 
 namespace {
 bool validGeometryCache(const std::filesystem::path &path) {

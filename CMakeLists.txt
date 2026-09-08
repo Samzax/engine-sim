@@ -314,6 +314,14 @@ endif (DISCORD_ENABLED)
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
+add_custom_target(engine-sim-build-revision
+    COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DOUTPUT_DIR=${PROJECT_BINARY_DIR}/generated/$<CONFIG>"
+        -P "${PROJECT_SOURCE_DIR}/cmake/BuildRevision.cmake"
+    VERBATIM)
+add_dependencies(engine-sim-app engine-sim-build-revision)
+target_include_directories(engine-sim-app PRIVATE "${PROJECT_BINARY_DIR}/generated/$<CONFIG>")
+
 add_subdirectory(dependencies)
 include(cmake/DeltaAudioFix.cmake)
 include(cmake/DeltaGraphicsFix.cmake)
