@@ -13,6 +13,7 @@
 #include "engine.h"
 
 #include <chrono>
+#include <memory>
 
 class Simulator {
 public:
@@ -91,6 +92,8 @@ private:
     void updateFilteredEngineSpeed(double dt);
 
 private:
+    std::unique_ptr<atg_scs::SleSolver> m_sleSolver;
+    std::unique_ptr<atg_scs::OdeSolver> m_odeSolver;
     atg_scs::RigidBody m_vehicleMass;
     VehicleDragConstraint m_vehicleDrag;
 

@@ -27,19 +27,17 @@ Simulator::~Simulator() {
 
 void Simulator::initialize(const Parameters &params) {
     if (params.systemType == SystemType::NsvOptimized) {
-        atg_scs::OptimizedNsvRigidBodySystem *system =
-            new atg_scs::OptimizedNsvRigidBodySystem;
-        system->initialize(
-            new atg_scs::GaussSeidelSleSolver);
-        m_system = system;
+        auto system = std::make_unique<atg_scs::OptimizedNsvRigidBodySystem>();
+        m_sleSolver = std::make_unique<atg_scs::GaussSeidelSleSolver>();
+        system->initialize(m_sleSolver.get());
+        m_system = system.release();
     }
     else {
-        atg_scs::GenericRigidBodySystem *system =
-            new atg_scs::GenericRigidBodySystem;
-        system->initialize(
-            new atg_scs::GaussianEliminationSleSolver,
-            new atg_scs::NsvOdeSolver);
-        m_system = system;
+        auto system = std::make_unique<atg_scs::GenericRigidBodySystem>();
+        m_sleSolver = std::make_unique<atg_scs::GaussianEliminationSleSolver>();
+        m_odeSolver = std::make_unique<atg_scs::NsvOdeSolver>();
+        system->initialize(m_sleSolver.get(), m_odeSolver.get());
+        m_system = system.release();
     }
 
     m_dynoTorqueSamples = new double[DynoTorqueSamples];
@@ -171,6 +169,8 @@ void Simulator::destroy() {
     m_dynoTorqueSamples = nullptr;
     delete m_system;
     m_system = nullptr;
+    m_sleSolver.reset();
+    m_odeSolver.reset();
     m_engine = nullptr;
     m_vehicle = nullptr;
     m_transmission = nullptr;
