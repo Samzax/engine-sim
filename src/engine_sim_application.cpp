@@ -341,10 +341,10 @@ void EngineSimApplication::initialize() {
     m_audioSource = m_engine.GetAudioDevice()->CreateSource(m_outputAudioBuffer);
     if (m_audioSource == nullptr) startupFailure("Could not create the output audio source.");
     checkStartup(m_audioSource->SetVolume(m_diagnosticMode ? 0.0f : 1.0f), "Audio volume initialization");
-    m_audioSource->SetMode((m_simulator->getEngine() != nullptr)
+    checkStartup(m_audioSource->SetMode((m_simulator->getEngine() != nullptr)
         ? ysAudioSource::Mode::Loop
-        : ysAudioSource::Mode::Stop);
-    m_audioSource->SetPan(0.0f);
+        : ysAudioSource::Mode::Stop), "Audio playback initialization");
+    checkStartup(m_audioSource->SetPan(0.0f), "Audio pan initialization");
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
     if (!m_diagnosticMode) {
