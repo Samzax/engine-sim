@@ -40,7 +40,7 @@ class EngineSimApplication {
 
         void initialize(void *instance, ysContextObject::DeviceAPI api);
         void run(int maxFrames = 0);
-        void setDiagnosticMode() { m_diagnosticMode = true; }
+        void setDiagnosticMode();
         void destroy();
 
         bool loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);

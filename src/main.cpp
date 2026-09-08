@@ -22,6 +22,10 @@ int WINAPI WinMain(
                 desktopName, sizeof(desktopName), &needed)
             || std::strncmp(desktopName, "EngineSimCheck_", 15) != 0) return 2;
         application.setDiagnosticMode();
+        std::ofstream report("gui-check.txt");
+        report << "GUI diagnostic started; completion pending.\n";
+        report.close();
+        if (!report) return 3;
     }
     application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
     application.run(diagnostic ? 120 : 0);

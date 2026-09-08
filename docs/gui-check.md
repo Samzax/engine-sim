@@ -22,20 +22,27 @@ whose name starts with `EngineSimCheck_`. It mutes audio before playback, skips
 Discord initialization, runs 120 frame-loop iterations, and performs normal
 shutdown. A successful run writes `gui-check.txt` in the working directory.
 Use the launcher's exit code to judge the current run; an older report may remain
-after a failed run. Startup failures are recorded in `error_log.log`.
+after a loader failure. Once the app starts, it replaces that report with a
+pending marker before initialization. Startup failures are recorded in
+`error_log.log` and diagnostic mode exits without displaying a modal dialog.
 
-Release passed on the development PC on 2026-09-08. This exercises real GUI,
+Debug and packaged Release passed on the development PC on 2026-09-08. This exercises real GUI,
 graphics and audio initialization and the rendering loop. It does not verify
 visible pixels, user interaction or audible output. An off-screen swap chain can
 be occluded, and the upstream graphics backend ignores the HRESULT from Present.
 
-Both Debug and Release built successfully. Debug reached graphics/audio startup
-but returned error 19 and the launcher terminated its off-screen error dialog at
-the timeout. Debug GUI execution is therefore not verified. The backend requests
-the Direct3D debug layer in Debug; the precise device-creation failure has not
-been diagnosed. Release passed using both packaged assets and the development
+The original Debug startup failure was traced to HRESULT `0x887A002D`
+(`DXGI_ERROR_SDK_COMPONENT_MISSING`): this PC lacks the optional Direct3D debug
+layer. A direct device-creation probe succeeded without that flag. The backend
+now retries with the standard runtime only for this specific failure and emits
+an `OutputDebugString` notice. Other device failures are preserved, and machines
+with the debug layer continue to use it. Release passed using both packaged assets and the development
 `delta.conf`. That check also found and fixed absolute configuration paths being
 incorrectly appended to the executable directory.
+
+The missing-assets failure path was also checked with a separate incomplete
+package: it returned exit code 1 immediately, logged the missing paths, and left
+the report marked pending rather than reporting success.
 
 The first run found a missing `d3dx10d_43.dll` dependency: upstream linked retail
 and debug D3DX libraries together, even in Release. The build now removes the

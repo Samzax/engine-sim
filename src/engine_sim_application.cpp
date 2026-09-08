@@ -33,12 +33,14 @@
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
 namespace {
+bool diagnosticErrors = false;
 [[noreturn]] void startupFailure(const std::string &message) {
     {
         std::ofstream log("error_log.log", std::ios::app);
         log << "Startup failed: " << message << '\n';
     }
-    MessageBoxA(nullptr, message.c_str(), "Engine Sim - startup failed", MB_OK | MB_ICONERROR);
+    if (!diagnosticErrors)
+        MessageBoxA(nullptr, message.c_str(), "Engine Sim - startup failed", MB_OK | MB_ICONERROR);
     // DeltaEngine::Destroy and its destructors require complete initialization.
     // Terminate this failed startup without unwinding partially created graphics
     // objects; Windows reclaims the process resources.
@@ -52,6 +54,11 @@ void checkStartup(ysError error, const char *stage) {
             "Check that the complete package was extracted and DirectX 11 is available.");
     }
 }
+}
+
+void EngineSimApplication::setDiagnosticMode() {
+    m_diagnosticMode = true;
+    diagnosticErrors = true;
 }
 
 EngineSimApplication::EngineSimApplication() {
