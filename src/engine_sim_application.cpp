@@ -1023,7 +1023,10 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage("Speed control set to " + std::to_string(m_targetSpeedSetting));
     }
 
-    m_speedSetting = m_targetSpeedSetting * 0.5 + 0.5 * m_speedSetting;
+    // Preserve the 60 FPS response without tying throttle lag to rendering speed.
+    const double speedDecay = std::exp2(-60.0 * dt);
+    m_speedSetting = m_targetSpeedSetting
+        + (m_speedSetting - m_targetSpeedSetting) * speedDecay;
 
     m_iceEngine->setSpeedControl(m_speedSetting);
     if (m_engine.ProcessKeyDown(ysKey::Code::Home)) {
