@@ -36,6 +36,17 @@ directory as a script and verifies that the current simulator survives. This
 does not modify engine scripts. A successful diagnostic consequently leaves an
 expected "Can't find file" entry in `error_log.log`; its process exit code and
 completion report determine success.
+
+To check startup without a usable engine, prepare a separate installed copy with
+an empty or invalid `assets/main.mr`, then append `--expect-empty-engine` to the
+launcher command. This mode requires that no engine loaded, exercises the empty
+dashboard and minimize/restore cycle, and skips the engine reload checks. It
+does not report starter RPM. The ordinary mode still requires a loaded engine;
+either mode exits with code 4 when its startup expectation is wrong. Both modes
+remain restricted to the isolated desktop. On 2026-09-08, the normal engine run,
+an import-only script, and a syntax-error script passed their respective modes;
+the normal mode correctly rejected the import-only script.
+
 When built with `DTV=ON`, the diagnostic also records frames 90 through 109 and
 stops the encoder at frame 110. On 2026-09-08, FFmpeg 9.0.1 could not initialize
 NVENC with the installed driver, so the app retried in software. The resulting

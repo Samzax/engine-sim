@@ -4,8 +4,9 @@
 #include <string>
 
 int wmain(int argc, wchar_t **argv) {
-    if (argc != 2) {
-        std::cerr << "Usage: engine-sim-gui-check <absolute engine-sim-app.exe path>\n";
+    const bool expectEmptyEngine = argc == 3 && std::wstring(argv[2]) == L"--expect-empty-engine";
+    if (argc != 2 && !expectEmptyEngine) {
+        std::cerr << "Usage: engine-sim-gui-check <absolute engine-sim-app.exe path> [--expect-empty-engine]\n";
         return 2;
     }
     const std::wstring name = L"EngineSimCheck_" + std::to_wstring(GetCurrentProcessId());
@@ -17,6 +18,7 @@ int wmain(int argc, wchar_t **argv) {
     }
     std::wstring desktopPath = L"winsta0\\" + name;
     std::wstring command = L"\"" + std::wstring(argv[1]) + L"\" --isolated-gui-check";
+    if (expectEmptyEngine) command += L"-empty";
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);
     startup.lpDesktop = &desktopPath[0];

@@ -539,7 +539,7 @@ void EngineSimApplication::run(int maxFrames) {
         }
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Return)
-            || (m_diagnosticMode && (frames == 40 || frames == 80))) {
+            || (m_diagnosticMode && m_iceEngine != nullptr && (frames == 40 || frames == 80))) {
             const auto setPlaybackMode = [this](ysAudioSource::Mode mode, const char *failure) {
                 const ysError error = m_audioSource->SetMode(mode);
                 if (error == ysError::None) return true;

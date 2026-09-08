@@ -14,7 +14,8 @@ int WINAPI WinMain(
     (void)hPrevInstance;
 
     EngineSimApplication application;
-    const bool diagnostic = std::strcmp(lpCmdLine, "--isolated-gui-check") == 0;
+    const bool expectEmptyEngine = std::strcmp(lpCmdLine, "--isolated-gui-check-empty") == 0;
+    const bool diagnostic = expectEmptyEngine || std::strcmp(lpCmdLine, "--isolated-gui-check") == 0;
     if (diagnostic) {
         char desktopName[256] = {};
         DWORD needed = 0;
@@ -28,14 +29,25 @@ int WINAPI WinMain(
         if (!report) return 3;
     }
     application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
+    const bool hasEngine = application.getSimulator()->getEngine() != nullptr;
+    if (diagnostic && hasEngine == expectEmptyEngine) {
+        application.destroy();
+        std::ofstream report("gui-check.txt");
+        report << "GUI diagnostic failed: expected " << (expectEmptyEngine ? "no engine" : "an engine")
+            << " at startup.\n";
+        return 4;
+    }
     application.run(diagnostic ? 120 : 0);
-    const double diagnosticRpm = diagnostic ? application.getSimulator()->getEngine()->getRpm() : 0.0;
+    const double diagnosticRpm = diagnostic && hasEngine
+        ? application.getSimulator()->getEngine()->getRpm() : 0.0;
     application.destroy();
     if (diagnostic) {
         std::ofstream report("gui-check.txt");
-        report << "GUI initialization, minimize/restore, successful reload, failed reload preserving the engine, "
-            "120 frame-loop iterations and shutdown completed.\n";
-        report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
+        report << "GUI initialization, minimize/restore, ";
+        if (hasEngine) report << "successful reload, failed reload preserving the engine, ";
+        else report << "empty-engine dashboard, ";
+        report << "120 frame-loop iterations and shutdown completed.\n";
+        if (hasEngine) report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
         report << "GUI video recording and encoder shutdown completed.\n";
 #endif
