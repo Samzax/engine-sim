@@ -15,6 +15,17 @@ optional starter duration (default 1 second), and optional throttle (default
 defaults. Relative paths are resolved from the caller's directory; absolute
 paths allow running from elsewhere.
 
+A final optional argument records the generated samples as mono 44,100 Hz PCM16:
+
+```powershell
+./engine-sim-headless.exe assets/main.mr es 10 1 0.1 subaru.wav
+```
+
+The named output file is overwritten. Recording streams to disk instead of
+retaining the run in memory. A failed run may leave an incomplete output file;
+only a successful exit confirms a finalized WAV. Recorded duration follows the
+actual simulated time, and recording I/O contributes to reported wall time.
+
 For a source checkout:
 
 ```powershell

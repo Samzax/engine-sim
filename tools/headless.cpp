@@ -4,11 +4,49 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
 namespace {
+class WaveOutput {
+public:
+    explicit WaveOutput(const char *path) {
+        if (!path) return;
+        stream.open(path, std::ios::binary | std::ios::trunc);
+        if (!stream) throw std::runtime_error("Cannot open output WAV");
+        writeHeader(0);
+    }
+    void append(const int16_t *data, int count) {
+        if (!stream.is_open()) return;
+        // The runner's one-hour duration limit stays below RIFF's 4GB limit.
+        for (int i = 0; i < count; ++i) writeNumber(static_cast<uint16_t>(data[i]), 2);
+        bytes += static_cast<uint32_t>(count) * 2;
+        if (!stream) throw std::runtime_error("Writing output WAV failed");
+    }
+    void finish() {
+        if (!stream.is_open()) return;
+        stream.seekp(0);
+        writeHeader(bytes);
+        stream.flush();
+        if (!stream) throw std::runtime_error("Finalizing output WAV failed");
+    }
+private:
+    void writeNumber(uint32_t value, int size) {
+        for (int i = 0; i < size; ++i) stream.put(static_cast<char>((value >> (8 * i)) & 255));
+    }
+    void writeHeader(uint32_t size) {
+        stream.write("RIFF", 4); writeNumber(36 + size, 4);
+        stream.write("WAVEfmt ", 8); writeNumber(16, 4);
+        writeNumber(1, 2); writeNumber(1, 2); writeNumber(44100, 4);
+        writeNumber(88200, 4); writeNumber(2, 2); writeNumber(16, 2);
+        stream.write("data", 4); writeNumber(size, 4);
+    }
+    std::ofstream stream;
+    uint32_t bytes = 0;
+};
+
 struct ScriptOwner {
     es_script::Compiler::Output output;
     ~ScriptOwner() {
@@ -20,8 +58,8 @@ struct ScriptOwner {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 4 || argc > 6) {
-        std::cerr << "Usage: engine-sim-headless <script.mr> <es-library-directory> <seconds> [starter-seconds=1] [throttle=0.1]\n";
+    if (argc < 4 || argc > 7) {
+        std::cerr << "Usage: engine-sim-headless <script.mr> <es-library-directory> <seconds> [starter-seconds=1] [throttle=0.1] [output.wav]\n";
         return 1;
     }
     try {
@@ -82,6 +120,7 @@ int main(int argc, char **argv) {
         simulator->setTargetSynthesizerLatency(0);
         out.engine->getIgnitionModule()->m_enabled = true;
         out.engine->setThrottle(throttle);
+        WaveOutput wave(argc > 6 ? argv[6] : nullptr);
         double simulated = 0, energy = 0;
         uint64_t samples = 0, clipped = 0;
         const auto start = std::chrono::steady_clock::now();
@@ -99,6 +138,7 @@ int main(int argc, char **argv) {
                 const int count = audio.readAudioOutput(2000, block);
                 if (count == 0) break;
                 samples += count;
+                wave.append(block, count);
                 for (int i = 0; i < count; ++i) {
                     const double value = block[i] / 32768.0;
                     energy += value * value;
@@ -110,6 +150,7 @@ int main(int argc, char **argv) {
             }
         }
         const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        wave.finish();
         std::cout << out.engine->getName() << ": simulated=" << simulated << "s, wall=" << wall
             << "s, rpm=" << out.engine->getRpm() << ", samples=" << samples
             << ", rms=" << (samples ? std::sqrt(energy / samples) : 0)
