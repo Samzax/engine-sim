@@ -102,6 +102,39 @@ the runs do not establish trajectory identity or improved measured accuracy.
 An additional CPU temperature-inversion cache was tested and removed because
 full-engine timings did not demonstrate a reliable benefit.
 
+### Bounded-worker transport experiment
+
+`tools/cuda-handshake-benchmark.cu` isolates host/device transport from the
+physics. It compares the existing graph-launch/synchronize pattern with workers
+that accept at most 128 requests per launch. Workers also retire on a GPU cycle
+budget; an idle-host check verifies retirement. CPU/GPU signaling uses aligned
+32-bit system-scope acquire/release loads and stores, permitted for mapped memory
+by NVIDIA's [CUDA memory model](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cuda-cpp-memory-model.html),
+even when the device reports no native host atomic read-modify-write support.
+Every active output value is checked for all 4,096 requests per configuration.
+
+One RTX 3090 run with eight active cells per pipe measured 24.579 versus 14.167
+microseconds per request for eight pipes, and 39.517 versus 33.331 microseconds
+for 24 pipes. These numbers include host payload preparation and verification;
+they are **not engine timings**. Earlier 64-cell experiments showed that workers
+can be slower at larger payloads. The prototype is not wired into the simulator:
+it does not yet recover a partially completed request when some workers retire.
+The experiment supports investigating launch amortization, but does not establish
+that persistent workers alone can deliver real-time simulation.
+
+For a Visual Studio x64 developer shell with the CUDA `bin` directory on PATH:
+
+```powershell
+nvcc -std=c++17 -arch=sm_86 -O3 --cudart shared -Xcompiler /MD -o build/cuda-handshake-benchmark.exe tools/cuda-handshake-benchmark.cu
+./build/cuda-handshake-benchmark.exe 8
+./build/cuda-handshake-benchmark.exe 64
+```
+
+The probe requires mapped memory and at least 24 multiprocessors. Its cycle
+budget is not a precise wall-time guarantee under changing GPU clocks. A host
+wait timeout or worker retirement during a request reports a failed experiment;
+it must not be interpreted as a valid timing result.
+
 ## Build and checks
 
 Configure with `-DENGINE_SIM_CUDA=ON` and an appropriate
