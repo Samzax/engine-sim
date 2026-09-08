@@ -101,8 +101,8 @@ namespace es_script {
                 ExhaustSystemNode *exhaustNode = getCylinder(i).exhaust;
                 IntakeNode *intakeNode = getCylinder(i).intake;
 
-                ExhaustSystem *exhaust = exhaustNode->generate(context);
-                Intake *intake = intakeNode->generate(context);
+                ExhaustSystem *exhaust = context->getExhaust(exhaustNode);
+                Intake *intake = context->getIntake(intakeNode);
 
                 head->setIntake(i, intake);
                 head->setExhaustSystem(i, exhaust);

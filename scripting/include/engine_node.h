@@ -101,6 +101,7 @@ namespace es_script {
                 for (ExhaustSystemNode *exhaust : exhaustSystems) {
                     context.addExhaust(
                         exhaust, engine->getExhaustSystem(i++));
+                    exhaust->generate(&context);
                 }
             }
 
@@ -109,6 +110,7 @@ namespace es_script {
                 for (IntakeNode *intake : intakes) {
                     context.addIntake(
                         intake, engine->getIntake(i++));
+                    intake->generate(&context);
                 }
             }
 
@@ -116,14 +118,6 @@ namespace es_script {
                 int i = 0;
                 for (const CylinderBankNode *bank : m_cylinderBanks) {
                     context.addHead(bank->getCylinderHead(), engine->getHead(i++));
-                }
-            }
-
-            for (const CylinderBankNode *bank : m_cylinderBanks) {
-                const int n = bank->getCylinderCount();
-                for (int i = 0; i < n; ++i) {
-                    exhaustSystems.insert(bank->getCylinder(i).exhaust);
-                    intakes.insert(bank->getCylinder(i).intake);
                 }
             }
 
