@@ -12,3 +12,5 @@ target_sources(engine-sim-audio-test PRIVATE src/wave_reader.cpp)
 target_link_libraries(engine-sim-audio-test PRIVATE Threads::Threads)
 add_test(NAME audio-regressions COMMAND engine-sim-audio-test)
 set_tests_properties(audio-regressions PROPERTIES TIMEOUT 60)
+add_executable(engine-sim-convolution-benchmark EXCLUDE_FROM_ALL
+    tools/convolution-benchmark.cpp src/convolution_filter.cpp src/filter.cpp src/wave_reader.cpp)

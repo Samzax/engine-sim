@@ -64,6 +64,21 @@ void convolutionTests() {
     filter.destroy();
     filter.destroy();
     CHECK(filter.f(0.25f) == 0.25f);
+    // Compare odd lengths, SIMD tails and ring wrap against causal convolution
+    // accumulated in double precision, independently of storage layout.
+    std::mt19937 random(91);
+    std::uniform_real_distribution<float> distribution(-0.5f, 0.5f);
+    for (int taps : {1, 3, 4, 7, 8, 31, 257, 10000}) {
+        filter.initialize(taps);
+        std::vector<float> impulse(taps), input(2 * taps + 11);
+        for (int i = 0; i < taps; ++i) filter.getImpulseResponse()[i] = impulse[i] = distribution(random);
+        for (int n = 0; n < static_cast<int>(input.size()); ++n) {
+            input[n] = distribution(random);
+            double expected = 0;
+            for (int k = 0; k < taps && k <= n; ++k) expected += double(impulse[k]) * input[n - k];
+            CHECK(std::abs(filter.f(input[n]) - expected) < 1E-4);
+        }
+    }
 }
 
 void waveTests() {

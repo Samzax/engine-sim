@@ -2,6 +2,29 @@
 
 #include <assert.h>
 #include <string.h>
+#if defined(_M_X64) || defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
+namespace {
+float dot(const float *a, const float *b, int count) {
+    int i = 0;
+    float result = 0;
+#if defined(_M_X64) || defined(__SSE2__)
+    // SSE2 is part of the x64 baseline; unaligned loads also handle the ring's
+    // wrapped segments. Other platforms retain the scalar implementation.
+    __m128 sum = _mm_setzero_ps();
+    for (; i + 4 <= count; i += 4) {
+        sum = _mm_add_ps(sum, _mm_mul_ps(_mm_loadu_ps(a + i), _mm_loadu_ps(b + i)));
+    }
+    float lanes[4];
+    _mm_storeu_ps(lanes, sum);
+    result = (lanes[0] + lanes[1]) + (lanes[2] + lanes[3]);
+#endif
+    for (; i < count; ++i) result += a[i] * b[i];
+    return result;
+}
+}
 
 ConvolutionFilter::ConvolutionFilter() {
     m_shiftRegister = nullptr;
@@ -42,14 +65,9 @@ float ConvolutionFilter::f(float sample) {
     if (m_sampleCount == 0) return sample;
     m_shiftRegister[m_shiftOffset] = sample;
 
-    float result = 0;
-    for (int i = 0; i < m_sampleCount - m_shiftOffset; ++i) {
-        result += m_impulseResponse[i] * m_shiftRegister[i + m_shiftOffset];
-    }
-
-    for (int i = m_sampleCount - m_shiftOffset; i < m_sampleCount; ++i) {
-        result += m_impulseResponse[i] * m_shiftRegister[i - (m_sampleCount - m_shiftOffset)];
-    }
+    const int first = m_sampleCount - m_shiftOffset;
+    const float result = dot(m_impulseResponse, m_shiftRegister + m_shiftOffset, first)
+        + dot(m_impulseResponse + first, m_shiftRegister, m_shiftOffset);
 
     m_shiftOffset = (m_shiftOffset - 1 + m_sampleCount) % m_sampleCount;
 
