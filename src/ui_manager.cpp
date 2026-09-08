@@ -67,6 +67,11 @@ void UiManager::update(float dt) {
 
         m_dragStart = nullptr;
     }
+    else if (!m_app->getEngine()->IsMouseButtonDown(ysMouse::Button::Left)) {
+        // Focus can leave and return between updates, clearing the button
+        // without an UpTransition. Cancel that drag without generating a click.
+        m_dragStart = nullptr;
+    }
 
     const int newMouseScroll = m_app->getEngine()->GetMouseWheel();
     if (m_lastMouseScroll != newMouseScroll) {
