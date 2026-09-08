@@ -17,7 +17,7 @@ LoadSimulationCluster::LoadSimulationCluster() {
     m_peakTorque = 0.0;
     m_peakHorsepowerRpm = 0.0;
     m_peakTorqueRpm = 0.0;
-    memset(m_systemStatusLights, 0, sizeof(double) * 4);
+    memset(m_systemStatusLights, 0, sizeof(m_systemStatusLights));
 }
 
 LoadSimulationCluster::~LoadSimulationCluster() {
