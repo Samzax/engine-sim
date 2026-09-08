@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "../scripting/include/compiler.h"
 #include "../include/simulator.h"
+#include "../include/piston_engine_simulator.h"
+#include "../include/constants.h"
 #include <memory>
 #include <limits>
 #include <stdexcept>
@@ -76,4 +78,44 @@ TEST(SimulatorRegression, ExecutionDoesNotReturnPreviousOutput) {
     EXPECT_FALSE(output.success);
     EXPECT_EQ(output.engine, nullptr);
     compiler.destroy();
+}
+
+TEST(SimulatorRegression, RadialDisplacementMatchesPistonTravel) {
+    es_script::Compiler compiler;
+    compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/es");
+    const bool compiled = compiler.compile(std::string(ENGINE_SIM_TEST_SOURCE_DIR) + "/test/scripts/radial_9.mr");
+    if (!compiled) { compiler.destroy(); FAIL() << "Radial script compilation failed"; }
+    EngineOwner owner;
+    owner.output = compiler.execute();
+    compiler.destroy();
+    ASSERT_TRUE(owner.output.success);
+    Engine *engine = owner.output.engine;
+    struct PlacementProbe : PistonEngineSimulator { using PistonEngineSimulator::placeCylinder; } simulator;
+    Simulator::Parameters params;
+    params.systemType = Simulator::SystemType::NsvOptimized;
+    simulator.initialize(params);
+    simulator.setSimulationFrequency(static_cast<int>(engine->getSimulationFrequency()));
+    simulator.loadSimulation(engine, owner.output.vehicle, owner.output.transmission);
+    engine->calculateDisplacement();
+
+    const int count = engine->getCylinderCount();
+    std::vector<double> low(count, std::numeric_limits<double>::infinity());
+    std::vector<double> high(count, -std::numeric_limits<double>::infinity());
+    for (int step = 0; step < 1000; ++step) {
+        // Placement uses the journal's local angle (normally only at startup).
+        engine->getCrankshaft(0)->setRodJournalAngle(0, 2 * constants::pi * step / 1000.0);
+        // This radial has one master rod and one level of articulated rods.
+        for (int i = 0; i < count; ++i)
+            if (!engine->getConnectingRod(i)->getMasterRod()) simulator.placeCylinder(i);
+        for (int i = 0; i < count; ++i)
+            if (engine->getConnectingRod(i)->getMasterRod()) simulator.placeCylinder(i);
+        for (int i = 0; i < count; ++i) {
+            const double volume = engine->getChamber(i)->getVolume();
+            low[i] = (std::min)(low[i], volume);
+            high[i] = (std::max)(high[i], volume);
+        }
+    }
+    double sweptVolume = 0;
+    for (int i = 0; i < count; ++i) sweptVolume += high[i] - low[i];
+    EXPECT_NEAR(engine->getDisplacement(), sweptVolume, 1e-8);
 }

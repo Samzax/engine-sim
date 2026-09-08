@@ -96,3 +96,12 @@ actual device playback remains unverified under the background-only constraint.
 The subsequent hidden-window diagnostic exercised the actual DirectSound buffer
 upload/readback path in Debug and Release without playback or changing focus;
 both passed. See `audio-device-check.md` for the exact scope and commands.
+
+The displacement calculation now uses each rod's journal index, converts master
+rod journal coordinates relative to its big end, and computes rod-body rotation
+with `atan2`. Previously it used a cylinder-bank index and an unnormalized
+distance in `acos`, producing incorrect articulated-rod geometry. On the bundled
+Radial 9, the old result was 16.488413 L; sampling the simulator's actual piston
+placement over a revolution gives 15.939338 L. The corrected calculation agrees
+with that independent placement path. This corrects the displayed displacement
+and statistics derived from it; it does not change the physics integrator.

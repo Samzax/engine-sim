@@ -39,6 +39,7 @@ Engine::Engine() {
 
     m_throttle = nullptr;
     m_throttleValue = 0.0;
+    m_displacement = 0.0;
 
     m_initialSimulationFrequency = 10000.0;
     m_initialHighFrequencyGain = 0.01;
@@ -202,13 +203,16 @@ bool placeRod(
             return false;
         }
 
-        rod.getMasterRod()->getRodJournalPositionLocal(rod.getPiston()->getCylinderIndex(), &l_x, &l_y);
+        rod.getMasterRod()->getRodJournalPositionLocal(rod.getJournal(), &l_x, &l_y);
+        // Recursive placement returns the master's big-end position, while
+        // its journal coordinates are relative to the rod body's origin.
+        l_y -= rod.getMasterRod()->getBigEndLocal();
     }
     else {
         theta_0 = crankshaftAngle;
         p_x_0 = rod.getCrankshaft()->getPosX();
         p_y_0 = rod.getCrankshaft()->getPosY();
-        rod.getCrankshaft()->getRodJournalPositionLocal(rod.getPiston()->getCylinderIndex(), &l_x, &l_y);
+        rod.getCrankshaft()->getRodJournalPositionLocal(rod.getJournal(), &l_x, &l_y);
     }
 
     const double dx = std::cos(theta_0);
@@ -234,13 +238,11 @@ bool placeRod(
     *s = std::max(s0, s1);
     if (*s < 0) return false;
    
-    if (s != nullptr) {
+    if (theta != nullptr) {
         const double dx = (bank.getX() + bank.getDx() * (*s)) - (*p_x);
         const double dy = (bank.getY() + bank.getDy() * (*s)) - (*p_y);
 
-        *theta = (dy > 0)
-            ? std::acos(dx)
-            : -std::acos(dx);
+        *theta = std::atan2(dy, dx) - constants::pi / 2;
     }
 
     return true;
