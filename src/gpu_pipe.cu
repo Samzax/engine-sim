@@ -9,6 +9,7 @@
 namespace gpu_pipe {
 namespace {
 __constant__ double cp[5][2][5];
+__constant__ double minimumCvRatio[5];
 constexpr double R=8.31446261815324;
 __device__ double cv(const double *a,double t) {
     return R*((((a[4]*t+a[3])*t+a[2])*t+a[1])*t+a[0]-1);
@@ -121,8 +122,26 @@ __global__ void solve(Pipe *pipes,int *error) {
         __syncthreads();
         dt-=h;
     }
-    if(i<n) for(int k=0;k<8;++k) pipe.u[i][k]=u[i][k];
-    if(i==0) error[blockIdx.x]=failureCode;
+    if(i<n) {
+        for(int k=0;k<8;++k) pipe.u[i][k]=u[i][k];
+        const double rho=density(u[i],fuelMass), velocity=u[i][5]/rho;
+        const double internal=u[i][6]-.5*u[i][5]*velocity;
+        const double n=u[i][0]+u[i][1]+u[i][2]+u[i][3]+u[i][4];
+        const double cvBound=u[i][0]*minimumCvRatio[4]+u[i][1]*minimumCvRatio[1]
+            +u[i][2]*minimumCvRatio[0]+u[i][3]*minimumCvRatio[2]+u[i][4]*minimumCvRatio[3];
+        // cv >= cv_min implies T <= u/cv_min and gamma <= 1+R/cv_min.
+        // Consequently this bounds |v|+c from above, never enlarging the CFL step.
+        const double q=n/cvBound;
+        speed[i]=fabs(velocity)+sqrt(q*(1+q)*internal/rho);
+        if(!isfinite(speed[i])) {atomicCAS(&failureCode,0,6); speed[i]=1;}
+    }
+    __syncthreads();
+    if(i==0) {
+        double maximum=1;
+        for(int j=0;j<n;++j) maximum=fmax(maximum,speed[j]);
+        pipe.stableTimestep=.25*dx/maximum;
+        error[blockIdx.x]=failureCode;
+    }
 }
 void check(cudaError_t result,const char *operation) {
     if(result!=cudaSuccess) throw std::runtime_error(std::string(operation)+": "+cudaGetErrorString(result));
@@ -146,6 +165,7 @@ struct Context {
             std::strncpy(name,properties.name,sizeof(name)-1);
             check(cudaStreamCreateWithFlags(&stream,cudaStreamNonBlocking),"CUDA stream");
             check(cudaMemcpyToSymbol(cp,gas_thermo::coefficients,sizeof(gas_thermo::coefficients)),"CUDA thermodynamic coefficients");
+            check(cudaMemcpyToSymbol(minimumCvRatio,gas_thermo::minimumCvRatio,sizeof(gas_thermo::minimumCvRatio)),"CUDA heat-capacity bounds");
         } catch(...) { release(); throw; }
     }
     void release() noexcept {
@@ -204,7 +224,9 @@ void advance(Pipe *pipes,int count,double dt) {
         if(c.hostError[i]==1) throw std::runtime_error("CUDA pipe exceeded substep limit");
         if(c.hostError[i]) throw std::runtime_error("CUDA pipe positivity failure, diagnostic code "+std::to_string(c.hostError[i]));
     }
-    for(int i=0;i<count;++i)
+    for(int i=0;i<count;++i) {
         std::memcpy(pipes[i].u,c.host[i].u,pipes[i].count*sizeof(pipes[i].u[0]));
+        pipes[i].stableTimestep=c.host[i].stableTimestep;
+    }
 }
 }

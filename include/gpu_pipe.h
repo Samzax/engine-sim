@@ -7,6 +7,7 @@ namespace gpu_pipe {
 struct Pipe {
     double u[64][8];
     double dx, diameter, friction, fuelMass, timestep;
+    double stableTimestep; // Output CFL limit for the returned cell state.
     int count;
 };
 bool enabled();

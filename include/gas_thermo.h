@@ -20,6 +20,12 @@ inline constexpr double coefficients[5][2][5] = {
      {15.9899273,0.055318479,-1.95267072e-5,3.11779172e-9,-1.85312577e-13}}
 };
 
+// Global lower bounds for cv/R over both polynomial intervals and their
+// constant endpoint extensions. Verified with Bernstein polynomial bounds in
+// the gas tests. They provide a conservative acoustic CFL estimate without
+// inverting sensible energy back to temperature.
+inline constexpr double minimumCvRatio[5]={2.45,2.45,2.8,2.99,14.0};
+
 inline double cvPolynomial(const double *a, double t) {
     return constants::R * ((((a[4]*t+a[3])*t+a[2])*t+a[1])*t+a[0]-1);
 }

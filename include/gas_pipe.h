@@ -7,6 +7,7 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
+#include <cstring>
 
 // First-order finite-volume 1D Euler pipe, with Rusanov interface fluxes.
 // Ports exchange gas with existing calibrated orifices; the distributed interior
@@ -17,6 +18,7 @@ public:
         if (count<1 || count>64) throw std::invalid_argument("pipe_cells must be between 1 and 64");
         if (!std::isfinite(frictionFactor) || frictionFactor<0)
             throw std::invalid_argument("pipe_friction_factor must be finite and nonnegative");
+        m_cachedCflValid=false;
         m_frictionFactor=frictionFactor;
         m_cells.clear();
         if (count==1) return;
@@ -38,6 +40,7 @@ public:
     GasSystem &cell(int i){return m_cells.at(i);}
     int count() const {return static_cast<int>(m_cells.size());}
     void configure(bool enabled, double fuelMass, double oxygenPerFuel) {
+        m_cachedCflValid=false;
         for (auto &cell:m_cells) {
             auto mix=cell.mix();
             if (enabled) { mix.p_inert=0.79; mix.p_o2=0.21; }
@@ -47,6 +50,16 @@ public:
         }
     }
     double stableTimestep() const {
+        if (m_cachedCflValid) {
+            // Mutable cell references may survive a GPU call. Compare the full
+            // physical state so any later port/user mutation invalidates reuse.
+            bool same=m_cachedCflStates.size()==m_cells.size();
+            for(size_t i=0;same && i<m_cells.size();++i)
+                same=m_cells[i].m_variableProperties && std::memcmp(
+                    &m_cachedCflStates[i],&m_cells[i].m_state,sizeof(GasSystem::State))==0;
+            if(same) return m_cachedCflStep;
+            m_cachedCflValid=false;
+        }
         double speed=1;
         for (const auto &cell:m_cells) speed=(std::max)(speed,std::abs(cell.velocity_x())+cell.c());
         return 0.25*m_dx/speed;
@@ -115,9 +128,16 @@ public:
         }
         if(gpuCount==0) return;
         gpu_pipe::advance(batch.data(),gpuCount,dt);
-        for(int j=0;j<gpuCount;++j) for(int i=0;i<batch[j].count;++i) {
-            Vector u; std::copy(batch[j].u[i],batch[j].u[i]+8,u.begin());
-            restore(targets[j]->m_cells[i],u);
+        for(int j=0;j<gpuCount;++j) {
+            auto &pipe=*targets[j];
+            pipe.m_cachedCflStates.resize(pipe.m_cells.size());
+            for(int i=0;i<batch[j].count;++i) {
+                Vector u; std::copy(batch[j].u[i],batch[j].u[i]+8,u.begin());
+                restore(pipe.m_cells[i],u);
+                std::memcpy(&pipe.m_cachedCflStates[i],&pipe.m_cells[i].m_state,sizeof(GasSystem::State));
+            }
+            pipe.m_cachedCflStep=batch[j].stableTimestep;
+            pipe.m_cachedCflValid=true;
         }
     }
 
@@ -170,13 +190,16 @@ private:
         m.p_inert=((std::max)(0.0,u[2])+(std::max)(0.0,u[3])+(std::max)(0.0,u[4]))/molarDensity;
         g.m_state.n_mol=molarDensity*g.volume();
         g.m_state.momentum[0]=u[5]*g.volume(); g.m_state.momentum[1]=0;
-        g.m_propertiesValid=false; g.m_cachedEnergy=-1;
+        g.invalidateProperties(); g.m_cachedEnergy=-1;
         m.residualFraction=std::clamp(u[7]*g.volume()/g.mass(),0.0,1.0);
         g.m_state.E_k=u[6]*g.volume()-g.bulkKineticEnergy();
         if (!std::isfinite(g.m_state.E_k) || g.m_state.E_k<=0)
             throw std::runtime_error("Pipe internal energy positivity failure");
     }
     std::vector<GasSystem> m_cells;
+    std::vector<GasSystem::State> m_cachedCflStates;
+    mutable bool m_cachedCflValid=false;
+    double m_cachedCflStep=0;
     std::vector<Vector> m_fluxes,m_states;
     double m_area=1,m_dx=1,m_frictionFactor=0.02;
 };

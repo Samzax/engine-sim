@@ -137,7 +137,14 @@ class GasSystem {
         bool m_variableProperties = false;
         mutable double m_cachedEnergy = -1, m_cachedN = -1, m_cachedTemperature = 300;
         void refreshProperties() const;
-        mutable bool m_propertiesValid = false;
+        mutable bool m_propertiesValid = false, m_massPropertiesValid = false;
+        void invalidateProperties() const { m_propertiesValid=false; m_massPropertiesValid=false; }
+        void refreshMass() const {
+            if (!m_massPropertiesValid) {
+                m_molarMass=molecularMass(m_state.mix);
+                m_massPropertiesValid=true;
+            }
+        }
         mutable double m_lowCp[5]{}, m_highCp[5]{};
         mutable double m_u200 = 0, m_u1000 = 0, m_u6000 = 0;
         mutable double m_cv200 = 0, m_cv6000 = 0, m_molarMass = 0;
@@ -257,7 +264,7 @@ inline double GasSystem::dynamicPressure(double dx, double dy) const {
 }
 
 inline double GasSystem::mass() const {
-    if (m_variableProperties) { refreshProperties(); return m_molarMass * n(); }
+    if (m_variableProperties) { refreshMass(); return m_molarMass * n(); }
     return units::AirMolecularMass * n();
 }
 

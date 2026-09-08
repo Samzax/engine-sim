@@ -5,6 +5,7 @@
 #include "../include/fuel.h"
 #include "../include/lubrication_model.h"
 #include "../include/gas_pipe.h"
+#include "../include/gas_thermo.h"
 #include "../include/units.h"
 #include "../include/csv_io.h"
 
@@ -102,6 +103,7 @@ TEST(GasSystemTests, CudaPipeMatchesCpuAndConservesEnergy) {
         // must handle this without inventing energy or rejecting valid inflow.
         initialEnergy-=intake.first().totalEnergy();
         intake.first().changeEnergy(-intake.first().kineticEnergy());
+        auto &retained=intake.first();
         auto cpuIntake=intake,cpuExhaust=exhaust;
         for(int step=0;step<20;++step) {
             cpuIntake.advance(1e-5); cpuExhaust.advance(1e-5);
@@ -129,6 +131,37 @@ TEST(GasSystemTests, CudaPipeMatchesCpuAndConservesEnergy) {
         }
         EXPECT_NEAR(mass,initialMass,initialMass*1e-10);
         EXPECT_NEAR(energy,initialEnergy,initialEnergy*1e-10);
+        const auto exactCfl=[&]() {
+            double speed=1;
+            for(int i=0;i<count;++i)
+                speed=(std::max)(speed,std::abs(intake.cell(i).velocity_x())+intake.cell(i).c());
+            return .25/count/speed;
+        };
+        EXPECT_LE(intake.stableTimestep(),exactCfl()*(1+1e-9));
+        // A retained reference can mutate the cell after the cached GPU result.
+        retained.changeTemperature(10000);
+        EXPECT_NEAR(intake.stableTimestep(),exactCfl(),1e-14);
+    }
+}
+
+TEST(GasSystemTests, AcousticHeatCapacityBoundsCoverNasaPolynomials) {
+    constexpr int choose[5][5]={{1},{1,1},{1,2,1},{1,3,3,1},{1,4,6,4,1}};
+    for(int species=0;species<5;++species) for(int range=0;range<2;++range) {
+        const auto &a=gas_thermo::coefficients[species][range];
+        const int begin=range==0?200:1000,end=range==0?1000:6000;
+        for(int lower=begin;lower<end;lower+=50) {
+            double power[5]{};
+            for(int k=0;k<5;++k) for(int j=k;j<5;++j)
+                power[k]+=a[j]*choose[j][k]*std::pow(lower,j-k)*std::pow(50,k);
+            power[0]-=1; // cp/R -> cv/R.
+            // A polynomial on [0,1] is bounded by its Bernstein coefficients.
+            // This checks entire intervals, including between sample points.
+            for(int i=0;i<5;++i) {
+                double bernstein=0;
+                for(int k=0;k<=i;++k) bernstein+=power[k]*choose[i][k]/choose[4][k];
+                EXPECT_GT(bernstein,gas_thermo::minimumCvRatio[species]+1e-6);
+            }
+        }
     }
 }
 
@@ -192,6 +225,17 @@ TEST(GasSystemTests, VariablePropertiesTemperatureAndReactionMass) {
     gas.changeEnergy(burned * mix.fuelMolecularMass * 44e6);
     EXPECT_GT(gas.temperature(), 1000);
     EXPECT_LT(gas.heatCapacityRatio(), 1.4);
+    const auto products=gas.mix();
+    // Compare the cached mixture polynomial with independent species energies
+    // after composition changes, including both NASA interval boundaries.
+    for (const auto &composition : {mix,products,mix}) {
+        gas.changeMix(composition);
+        EXPECT_NEAR(gas.mass(),gas.n()*GasSystem::molecularMass(composition),1e-14);
+        for (double t : {0.0,150.0,200.0,300.0,999.9,1000.0,1000.1,2500.0,6000.0,7000.0}) {
+            const double expected=GasSystem::mixtureEnergy(t,composition);
+            EXPECT_NEAR(gas.molarEnergy(t),expected,1e-10*(std::max)(1.0,std::abs(expected)));
+        }
+    }
 }
 
 TEST(GasSystemTests, VariableMixtureFlowConservesMassAndEnergy) {

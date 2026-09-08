@@ -24,7 +24,7 @@ NASA coefficient table and temperature inversion tolerance as the CPU. No fast
 math or lower-precision physics is enabled.
 
 The engine submits all pipe interiors in a single batch per coupled fluid step.
-CPU and GPU modes use the same common CFL timestep and retain ordered port
+Each mode uses a common CFL timestep across the pipes and retains ordered port
 exchanges for shared plenums and collectors. This differs from the previous
 per-cylinder substep schedule when different pipes impose different CFL limits.
 Chambers, port exchanges, rigid-body mechanics, combustion, oil, wall heat,
@@ -41,6 +41,16 @@ reported before results are applied to the host engine state. CPU staging copies
 only active cells and reuses records rather than zeroing 64 slots on every call.
 Runner summaries for audio/readouts are calculated once per mechanical step;
 all physical cells still advance on every fluid step.
+
+The GPU also returns a conservative bound for the next coupling timestep. Global
+lower bounds on each species' heat capacity give an upper bound on sound speed
+without repeating temperature inversion on the CPU. The solver still computes
+the full NASA thermodynamics for its internal fluxes and substeps. The host
+reuses this bound only while every cell's physical state is unchanged; retained
+mutable references cannot leave a stale result in use. Molecular mass is cached
+separately so restoring GPU state does not evaluate unused heat-capacity curves.
+The bound can make coupling steps smaller than the CPU's exact acoustic limit,
+so CPU and GPU trajectories need not be identical.
 
 ## Performance limits
 
@@ -73,6 +83,25 @@ audio varied between some repeated runs of both builds, so byte identity is not
 claimed for every benchmark run. These short headless results demonstrate a GPU
 backend improvement, **not real-time performance** or a GPU advantage over CPU.
 
+A subsequent comparison of the cached CFL bound against `bc7f33f8` alternated
+three runs per build, requesting 0.25 simulated seconds with the starter held
+throughout and a 0.2 speed input. The GUI was closed; ordinary desktop GPU
+activity fluctuated, so these are provisional short-run measurements:
+
+| Engine | `bc7f33f8` | Cached CFL bound | Reduction in wall time |
+| --- | ---: | ---: | ---: |
+| Hayabusa | 2.387 s | 2.256 s | 5.5% |
+| Ferrari V12 | 2.102 s | 1.799 s | 14.4% |
+
+A single 64-cell Hayabusa pair requesting 0.1 simulated seconds took 6.817 s
+before and 4.959 s after. This is a stress check, not a statistically established
+speedup. Hayabusa's reported physical metrics matched at printed precision in the
+default-cell runs. V12 final RPM changed from 521.476 to 521.553, and coolant
+energy from 0.0285812 J to 0.029385 J, consistent with the changed coupling steps;
+the runs do not establish trajectory identity or improved measured accuracy.
+An additional CPU temperature-inversion cache was tested and removed because
+full-engine timings did not demonstrate a reliable benefit.
+
 ## Build and checks
 
 Configure with `-DENGINE_SIM_CUDA=ON` and an appropriate
@@ -86,9 +115,15 @@ CPU-only builds leave the option off and do not require CUDA.
 150–7000 K, mixed species, pressure gradients and friction, and checks total mass
 and energy conservation, including an energy-depleted port endpoint. It has also
 passed NVIDIA Compute Sanitizer memcheck.
+The cached-bound version also passed memcheck and racecheck with no reported
+errors or hazards. Its tests verify that the returned timestep does not exceed
+the exact acoustic limit and that cell mutation invalidates reuse. Bernstein
+coefficient bounds check the heat-capacity minima over the complete polynomial
+intervals, including their endpoint extensions. Independent species-energy sums
+check the CPU mixture cache across composition changes and temperature boundaries.
 These establish implementation agreement, not agreement with a measured engine.
 
-The selected CPU regression run passed 53 checks, with the CUDA-only comparison
+The selected CPU regression run passed 54 checks, with the CUDA-only comparison
 skipped there and run separately with CUDA enabled. A CPU-only configuration
 also builds without the CUDA toolkit dependency. Both Hayabusa and Ferrari V12
 completed one simulated second on both backends with a half-second starter and

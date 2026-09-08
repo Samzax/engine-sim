@@ -38,7 +38,7 @@ void GasSystem::refreshProperties() const {
     m_u200 = 200*m_cv200;
     m_u1000 = m_u200 + gas_thermo::integral(m_lowCp,1000)-gas_thermo::integral(m_lowCp,200);
     m_u6000 = m_u1000 + gas_thermo::integral(m_highCp,6000)-gas_thermo::integral(m_highCp,1000);
-    m_molarMass = molecularMass(m);
+    refreshMass();
     m_propertiesValid = true;
 }
 
@@ -70,7 +70,7 @@ double GasSystem::heatCapacity(double t) const {
 void GasSystem::setVariableProperties(bool enabled) {
     const double t = temperature();
     m_variableProperties = enabled;
-    m_propertiesValid = false;
+    invalidateProperties();
     m_state.E_k = energyAtTemperature(t);
     m_cachedEnergy = -1;
 }
@@ -106,7 +106,7 @@ void GasSystem::initialize(double P, double V, double T, const Mix &mix, int deg
     m_state.V = V;
     m_state.E_k = T * (0.5 * degreesOfFreedom * m_state.n_mol * constants::R);
     m_state.mix = mix;
-    m_propertiesValid = false;
+    invalidateProperties();
     if (m_variableProperties) m_state.E_k = energyAtTemperature(T);
     m_cachedEnergy = -1;
     m_state.momentum[0] = m_state.momentum[1] = 0;
@@ -120,7 +120,7 @@ void GasSystem::reset(double P, double T, const Mix &mix) {
     m_state.n_mol = P * volume() / (constants::R * T);
     m_state.E_k = T * (0.5 * m_degreesOfFreedom * m_state.n_mol * constants::R);
     m_state.mix = mix;
-    m_propertiesValid = false;
+    invalidateProperties();
     if (m_variableProperties) m_state.E_k = energyAtTemperature(T);
     m_cachedEnergy = -1;
     m_state.momentum[0] = m_state.momentum[1] = 0;
@@ -168,7 +168,7 @@ void GasSystem::changeEnergy(double dE) {
 
 void GasSystem::changeMix(const Mix &mix) {
     m_state.mix = mix;
-    m_propertiesValid = false;
+    invalidateProperties();
     m_cachedEnergy = -1;
 }
 
@@ -214,7 +214,7 @@ double GasSystem::react(double n, const Mix &mix) {
         m_state.mix.p_h2o = (old.p_h2o * oldN + water * burned) / newN;
         m_state.mix.p_inert = (old.p_inert * oldN + (carbon + water) * burned) / newN;
         m_state.n_mol = newN;
-        m_propertiesValid = false;
+        invalidateProperties();
         m_cachedEnergy = -1;
         // Fuel energy density supplies the reaction enthalpy at 298.15 K.
         // Convert it to internal energy and maintain our sensible-energy datum.
@@ -412,7 +412,7 @@ double GasSystem::gainN(double dn, double E_k_per_mol, const Mix &mix) {
         m_state.mix.p_co2 = m_state.mix.p_h2o = 0;
     }
     m_cachedEnergy = -1;
-    m_propertiesValid = false;
+    invalidateProperties();
 
     return -dn;
 }
