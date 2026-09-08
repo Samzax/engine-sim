@@ -143,7 +143,7 @@ public node merlin_v12 {
 
     engine engine(
         name: "Merlin V-1650-9 [V12] (NA)",
-        starter_torque: 190 * units.lb_ft,
+        starter_torque: 600 * units.lb_ft,
         starter_speed: 200 * units.rpm,
         redline: 3000 * units.rpm,
         fuel: fuel(

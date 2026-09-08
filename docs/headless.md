@@ -19,9 +19,11 @@ The throttle argument drives the engine's speed-control input, as the GUI does.
 Throttle curves and governors in the engine script determine the resulting
 plate opening; the argument is not a direct plate angle.
 With this correction, the bundled radial-nine completed a 7-second run with
-3 seconds of starter and a 0.3 input at approximately 3451 RPM. The Merlin still
-stalled under those same settings; these settings are not universal start
-procedures. No engine tuning was changed to obtain these observations.
+3 seconds of starter and a 0.3 input at approximately 3451 RPM. The Merlin's
+original 190 lb-ft starter reached only about 29 RPM. Its bundled script now
+uses 600 lb-ft; a 7-second run with the default 1-second starter and 0.1 input
+reached approximately 1423 RPM after starter release. These observations are
+specific to the bundled models and do not establish universal start procedures.
 
 Numeric arguments must be finite numbers; decimal and scientific notation are
 accepted. Unit suffixes and trailing text are rejected (`0.01` seconds is valid,
