@@ -352,3 +352,15 @@ position. After the fix, the gap was below 2e-14 m and the volume discrepancy
 was zero. The temporary measurement was removed afterward. All 15 simulator
 regressions passed, and the offset fixture completed the isolated GUI reload,
 rendering, and shutdown check; its captured frame was inspected.
+
+### Intake and exhaust gas volumes
+
+Intake initialization rejects nonpositive or nonfinite plenum volume, cross
+section area, and derived length. Exhaust initialization applies the same
+requirements to collector length, cross section area, and derived volume.
+These checks run before initializing the gas systems. Previously, a Honda
+fixture with zero plenum volume loaded successfully and reported roughly
+9.5e304 RPM after 0.01 seconds. It now fails with a specific geometry error;
+a zero-volume exhaust fixture is also rejected. All 15 simulator regressions
+and short startup runs of all 20 bundled engine fixtures passed. These checks
+cover plenum and collector geometry, not every parameter in an engine script.

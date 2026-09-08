@@ -3,6 +3,7 @@
 #include "../include/units.h"
 
 #include <cmath>
+#include <stdexcept>
 
 Intake::Intake() {
     m_inputFlowK = 0;
@@ -22,6 +23,12 @@ Intake::~Intake() {
 }
 
 void Intake::initialize(Parameters &params) {
+    const double length = params.volume / params.CrossSectionArea;
+    if (!std::isfinite(params.volume) || params.volume <= 0
+        || !std::isfinite(params.CrossSectionArea) || params.CrossSectionArea <= 0
+        || !std::isfinite(length) || length <= 0) {
+        throw std::invalid_argument("Intake plenum volume, cross section area and length must be finite and positive");
+    }
     const double width = std::sqrt(params.CrossSectionArea);
     m_system.initialize(
         units::pressure(1.0, units::atm),
@@ -29,7 +36,7 @@ void Intake::initialize(Parameters &params) {
         units::celcius(25.0));
     m_system.setGeometry(
         width,
-        params.volume / params.CrossSectionArea,
+        length,
         1.0,
         0.0);
 

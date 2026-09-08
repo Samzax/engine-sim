@@ -2,6 +2,9 @@
 
 #include "../include/units.h"
 
+#include <cmath>
+#include <stdexcept>
+
 ExhaustSystem::ExhaustSystem() {
     m_primaryFlowRate = 0;
     m_outletFlowRate = 0;
@@ -20,8 +23,13 @@ ExhaustSystem::~ExhaustSystem() {
 }
 
 void ExhaustSystem::initialize(const Parameters &params) {
-    const double systemWidth = std::sqrt(params.collectorCrossSectionArea);
     const double volume = params.collectorCrossSectionArea * params.length;
+    if (!std::isfinite(params.length) || params.length <= 0
+        || !std::isfinite(params.collectorCrossSectionArea) || params.collectorCrossSectionArea <= 0
+        || !std::isfinite(volume) || volume <= 0) {
+        throw std::invalid_argument("Exhaust collector length, cross section area and volume must be finite and positive");
+    }
+    const double systemWidth = std::sqrt(params.collectorCrossSectionArea);
     const double systemLength = params.length;
     m_system.initialize(
             units::pressure(1.0, units::atm),
