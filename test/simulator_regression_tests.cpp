@@ -21,6 +21,19 @@ struct EngineOwner {
 };
 }
 
+TEST(SimulatorRegression, RodCenterOfMassPreservesPinSpacing) {
+    for (double offset : {-0.02, 0.0, 0.02}) {
+        ConnectingRod rod;
+        ConnectingRod::Parameters parameters;
+        parameters.length = 0.15;
+        parameters.centerOfMass = offset;
+        rod.initialize(parameters);
+        EXPECT_NEAR(rod.getLittleEndLocal() - rod.getBigEndLocal(), parameters.length, 1e-12);
+        // The body's origin is its center of mass, offset from the pin midpoint.
+        EXPECT_NEAR((rod.getLittleEndLocal() + rod.getBigEndLocal()) / 2, -offset, 1e-12);
+    }
+}
+
 TEST(SimulatorRegression, RoadDragOpposesBothRotationDirections) {
     double finalSpeeds[2];
     for (int direction = 0; direction < 2; ++direction) {

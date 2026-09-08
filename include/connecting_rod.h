@@ -11,6 +11,7 @@ class ConnectingRod : public Part {
         struct Parameters {
             double mass = 0.0;
             double momentOfInertia = 0.0;
+            // Offset from the pin midpoint, positive toward the little end.
             double centerOfMass = 0.0;
             double length = 0.0;
 

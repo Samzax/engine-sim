@@ -19,7 +19,7 @@ ConnectingRod::ConnectingRod() {
 }
 
 ConnectingRod::~ConnectingRod() {
-    /* void */
+    delete[] m_rodJournalAngles;
 }
 
 void ConnectingRod::initialize(const Parameters &params) {
@@ -38,7 +38,7 @@ void ConnectingRod::initialize(const Parameters &params) {
 }
 
 double ConnectingRod::getBigEndLocal() const {
-    return -(m_length / 2) + m_centerOfMass;
+    return -(m_length / 2) - m_centerOfMass;
 }
 
 double ConnectingRod::getLittleEndLocal() const {

@@ -310,3 +310,12 @@ was accepted by the old build and reached approximately 153,000 RPM in 10 ms;
 the fixed build rejects it before physics starts. All 13 simulator regressions
 and 20 bundled short engine runs still passed. This validates the initial
 position, not clearance or reachability throughout a complete crank cycle.
+
+Connecting-rod pin coordinates now both subtract the center-of-mass offset
+from their midpoint-relative positions. Previously, the big-end sign was
+opposite, so a 150 mm rod with a +20 mm offset had only 110 mm between its pins
+(190 mm with a -20 mm offset). Positive offsets are toward the little end.
+The regression checks pin spacing and the center-of-mass origin for positive,
+negative, and zero offsets; it failed before the fix and now passes alongside
+the other 13 simulator regressions. Rod destruction also frees its owned
+journal-angle array, which previously leaked when engines were destroyed.
