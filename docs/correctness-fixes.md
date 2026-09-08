@@ -413,3 +413,10 @@ An isolated GUI run with a temporary 1.1-atmosphere display input showed the
 expected 1.5 PSI reading; previously the conversion and display both forced
 that input to zero. The temporary input was removed and the normal application
 rebuilt. This is a readout correction, not a change to the intake simulation.
+
+### Fuel-cost estimate
+
+The fuel panel labels its dollar total as an estimate and displays the fixed
+assumption of $4.761 USD per US gallon beneath it. The calculation is unchanged;
+the rate is not a live fuel price. The Release build and isolated GUI check
+passed, and the captured frame confirmed the labels fit the fuel panel.

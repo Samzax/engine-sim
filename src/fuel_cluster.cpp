@@ -56,13 +56,19 @@ void FuelCluster::render() {
 
     const double fuelConsumed = getTotalVolumeFuelConsumed();
     const double fuelConsumed_gallons = units::convert(fuelConsumed, units::gal);
+    constexpr double estimatedUsdPerGallon = 4.761;
 
     ss = std::stringstream();
     ss << std::setprecision(2) << std::fixed;
-    ss << "$" << 4.761 * fuelConsumed_gallons << " USD";
+    ss << "EST. $" << estimatedUsdPerGallon * fuelConsumed_gallons;
 
     const Bounds costUSD = grid.get(bodyBounds, 0, 4);
     drawText(ss.str(), costUSD, 16.0f, Bounds::lm);
+
+    ss = std::stringstream();
+    ss << std::fixed << std::setprecision(3)
+        << "$" << estimatedUsdPerGallon << " USD/US GAL";
+    drawText(ss.str(), grid.get(bodyBounds, 0, 5), 10.0f, Bounds::lm);
 
     const double travelledDistance = (m_simulator->getVehicle() != nullptr)
         ? m_simulator->getVehicle()->getTravelledDistance()
