@@ -88,7 +88,7 @@ void es_script::Compiler::printError(
     std::ofstream &file) const
 {
     const piranha::ErrorCode_struct &errorCode = err->getErrorCode();
-    file << err->getCompilationUnit()->getPath().getStem()
+    file << err->getCompilationUnit()->getPath().toString()
         << "(" << err->getErrorLocation()->lineStart << "): error "
         << errorCode.stage << errorCode.code << ": " << errorCode.info << std::endl;
 
@@ -106,7 +106,7 @@ void es_script::Compiler::printError(
 
             file
                 << "       While instantiating: "
-                << instance->getParentUnit()->getPath().getStem()
+                << instance->getParentUnit()->getPath().toString()
                 << "(" << instance->getSummaryToken()->lineStart << "): "
                 << formattedName << std::endl;
         }
