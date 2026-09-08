@@ -1,7 +1,8 @@
 # Engine Sim for Windows
 
 Extract the entire ZIP to a writable folder, then open `engine-sim-app.exe`.
-Keep the DLLs, `assets`, `es`, and `engine` folders beside it. No installer is required.
+Keep the DLLs, `assets`, `es`, and `engine` folders beside it. The application
+needs no installer, but the graphics runtime requirements below still apply.
 
 Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed scripts leave the current engine running;
@@ -9,6 +10,18 @@ details are written to `error_log.log` in the working directory.
 
 The package includes the Microsoft release runtime and SDL libraries. A Windows
 x64 PC with DirectX 11 graphics and a working audio output is required.
+
+The GUI also imports `d3dx10_43.dll`, `d3dx11_43.dll`, and `vulkan-1.dll`, which
+are not included in this ZIP. For missing D3DX libraries, use Microsoft's
+[DirectX End-User Runtimes (June 2010)](https://www.microsoft.com/en-us/download/details.aspx?id=8109).
+Having DirectX 11 already installed does not supply those legacy helper libraries.
+The Vulkan loader normally comes with the GPU vendor's driver package; see the
+[official Vulkan Windows setup documentation](https://vulkan.lunarg.com/doc/view/1.4.309.0/windows/getting_started.html).
+The current GUI links that loader even though it renders with DirectX 11.
+
+A missing DLL can stop Windows from starting the application before it can write
+`error_log.log`. `engine-sim-headless.exe` does not import SDL, D3DX or Vulkan;
+it uses the bundled Microsoft runtime and does not require a graphics or audio device.
 
 Developer builds generate `delta.conf` beside the executable, pointing at the
 checkout. Portable packages use their own adjacent assets without that file.
