@@ -4,6 +4,8 @@
 #include <string.h>
 #include <assert.h>
 #include <cmath>
+#include <memory>
+#include <stdexcept>
 
 GaussianFilter *Function::DefaultGaussianFilter = nullptr;
 
@@ -30,8 +32,9 @@ Function::~Function() {
 }
 
 void Function::initialize(int size, double filterRadius, GaussianFilter *filter) {
+    if (size < 0) throw std::invalid_argument("Function capacity cannot be negative");
+    destroy();
     resize(size);
-    m_size = 0;
     m_filterRadius = filterRadius;
 
     m_gaussianFilter = (filter != nullptr)
@@ -40,19 +43,22 @@ void Function::initialize(int size, double filterRadius, GaussianFilter *filter)
 }
 
 void Function::resize(int newCapacity) {
-    double *new_x = new double[newCapacity];
-    double *new_y = new double[newCapacity];
+    if (newCapacity < m_size || newCapacity < 0) {
+        throw std::invalid_argument("Function capacity cannot discard existing samples");
+    }
+    auto new_x = std::make_unique<double[]>(newCapacity);
+    auto new_y = std::make_unique<double[]>(newCapacity);
 
     if (m_size > 0) {
-        memcpy(new_x, m_x, sizeof(double) * m_size);
-        memcpy(new_y, m_y, sizeof(double) * m_size);
+        memcpy(new_x.get(), m_x, sizeof(double) * m_size);
+        memcpy(new_y.get(), m_y, sizeof(double) * m_size);
     }
 
     delete[] m_x;
     delete[] m_y;
 
-    m_x = new_x;
-    m_y = new_y;
+    m_x = new_x.release();
+    m_y = new_y.release();
 
     m_capacity = newCapacity;
 }
@@ -66,6 +72,7 @@ void Function::destroy() {
 
     m_capacity = 0;
     m_size = 0;
+    m_yMin = m_yMax = 0;
 }
 
 void Function::addSample(double x, double y) {
@@ -73,8 +80,8 @@ void Function::addSample(double x, double y) {
         resize(m_capacity * 2 + 1);
     }
 
-    m_yMin = std::fmin(m_yMin, y);
-    m_yMax = std::fmax(m_yMax, y);
+    m_yMin = m_size == 0 ? y : std::fmin(m_yMin, y);
+    m_yMax = m_size == 0 ? y : std::fmax(m_yMax, y);
 
     const int closest = closestSample(x);
     if (closest == -1) {

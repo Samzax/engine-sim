@@ -1,10 +1,6 @@
 #ifndef ATG_ENGINE_SIM_GUASSIAN_FILTER_H
 #define ATG_ENGINE_SIM_GUASSIAN_FILTER_H
 
-#include "scs.h"
-
-#include "crankshaft.h"
-
 class GaussianFilter {
     public:
         GaussianFilter();

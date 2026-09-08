@@ -1,6 +1,7 @@
 #include "../include/gaussian_filter.h"
 
 #include <cmath>
+#include <algorithm>
 
 GaussianFilter::GaussianFilter() {
     m_cache = nullptr;

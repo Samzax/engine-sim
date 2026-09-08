@@ -56,3 +56,17 @@ Discord Rich Presence remains available in Release. Debug builds omit it because
 - Registered generated impulse responses with their engine context so repeated uses share the response and engine cleanup releases it.
 - CPack builds a Release ZIP containing runtime DLLs, assets, scripts, fonts, shaders, and license files. The local archive was generated and its entries checked; the graphical launch check was interrupted by the user and remains unverified.
 - CI runs on fix branches and uploads the Release ZIP. See `portable-release.md` for packaging commands.
+
+## Curve reuse follow-up
+
+Reinitializing a populated `Function` with a smaller capacity previously copied
+the old samples into the smaller allocation. Initialization now clears the old
+curve first; direct resizing rejects capacities below the existing sample count.
+Paired allocations use temporary owners so an allocation failure cannot leak
+the first array. Range values reset on reuse and no longer incorrectly include
+zero for wholly positive or negative samples. The targeted reuse regression and
+the existing project checks passed in Windows Debug and Release (30/30 each).
+All six curve tests also passed under WSL AddressSanitizer and
+UndefinedBehaviorSanitizer. Unused physics/crankshaft includes were removed from
+the Gaussian filter header, allowing this focused check without graphics or
+physics dependencies.

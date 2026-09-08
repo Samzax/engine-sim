@@ -4,6 +4,30 @@
 
 #include <stdlib.h>
 #include <cmath>
+#include <stdexcept>
+
+TEST(FunctionTests, ReinitializeSmallerCurve) {
+    Function f;
+    f.initialize(8, 1.0);
+    for (int i = 0; i < 8; ++i) f.addSample(i, i + 2.0);
+    double low, high;
+    f.getRange(&low, &high);
+    EXPECT_DOUBLE_EQ(low, 2.0);
+    EXPECT_DOUBLE_EQ(high, 9.0);
+    EXPECT_THROW(f.resize(1), std::invalid_argument);
+    EXPECT_DOUBLE_EQ(f.sampleTriangle(7), 9.0);
+
+    f.initialize(1, 1.0);
+    f.getRange(&low, &high);
+    EXPECT_DOUBLE_EQ(low, 0.0);
+    EXPECT_DOUBLE_EQ(high, 0.0);
+    f.addSample(0, -3);
+    f.getRange(&low, &high);
+    EXPECT_DOUBLE_EQ(low, -3.0);
+    EXPECT_DOUBLE_EQ(high, -3.0);
+    EXPECT_DOUBLE_EQ(f.sampleTriangle(0), -3.0);
+    f.destroy();
+}
 
 TEST(FunctionTests, FunctionSanityCheck) {
     Function f;
