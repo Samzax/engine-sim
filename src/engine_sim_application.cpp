@@ -1132,21 +1132,18 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_engine.ProcessKeyDown(ysKey::Code::Up)) {
-        m_simulator->getTransmission()->changeGear(m_simulator->getTransmission()->getGear() + 1);
-
-        m_infoCluster->setLogMessage(
-            "UPSHIFTED TO " + std::to_string(m_simulator->getTransmission()->getGear() + 1));
-    }
-    else if (m_engine.ProcessKeyDown(ysKey::Code::Down)) {
-        m_simulator->getTransmission()->changeGear(m_simulator->getTransmission()->getGear() - 1);
-
-        if (m_simulator->getTransmission()->getGear() != -1) {
-            m_infoCluster->setLogMessage(
-                "DOWNSHIFTED TO " + std::to_string(m_simulator->getTransmission()->getGear() + 1));
-        }
-        else {
-            m_infoCluster->setLogMessage("SHIFTED TO NEUTRAL");
+    const int gearStep = m_engine.ProcessKeyDown(ysKey::Code::Up) ? 1
+        : m_engine.ProcessKeyDown(ysKey::Code::Down) ? -1 : 0;
+    if (gearStep != 0) {
+        Transmission *transmission = m_simulator->getTransmission();
+        const int previousGear = transmission->getGear();
+        transmission->changeGear(previousGear + gearStep);
+        const int currentGear = transmission->getGear();
+        if (currentGear != previousGear) {
+            m_infoCluster->setLogMessage(currentGear == -1
+                ? "SHIFTED TO NEUTRAL"
+                : std::string(gearStep > 0 ? "UPSHIFTED TO " : "DOWNSHIFTED TO ")
+                    + std::to_string(currentGear + 1));
         }
     }
 
