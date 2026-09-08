@@ -119,6 +119,27 @@ TEST(SimulatorRegression, ExhaustOxygenDoesNotRequireUnburnedFuel) {
     engine.destroy();
 }
 
+TEST(SimulatorRegression, MixtureGaugesUseConfiguredFuelMass) {
+    Engine engine;
+    Engine::Parameters params{};
+    params.intakeCount = params.exhaustSystemCount = 1;
+    engine.initialize(params);
+    const GasSystem::Mix mix{0.1, 0.7, 0.2};
+    engine.getIntake(0)->m_system.initialize(units::atm, units::L, 300, mix);
+    engine.getExhaustSystem(0)->getSystem()->initialize(units::atm, units::L, 300, mix);
+    Fuel::Parameters fuel;
+    fuel.molecularMass = units::mass(100, units::g);
+    engine.getFuel()->initialize(fuel);
+    const double initialAfr = engine.getIntakeAfr();
+    EXPECT_GT(initialAfr, 0);
+    EXPECT_NEAR(engine.getExhaustO2(), 0.1777239155, 1e-9);
+    fuel.molecularMass *= 2;
+    engine.getFuel()->initialize(fuel);
+    EXPECT_NEAR(engine.getIntakeAfr(), initialAfr / 2, 1e-9);
+    EXPECT_NEAR(engine.getExhaustO2(), 0.1390963095, 1e-9);
+    engine.destroy();
+}
+
 TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
     for (const char *path : {"test/scripts/hayabusa.mr", "test/scripts/ferrari_v12.mr"}) {
         es_script::Compiler compiler;

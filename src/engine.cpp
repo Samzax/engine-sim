@@ -336,14 +336,14 @@ double Engine::getIntakeAfr() const {
         totalFuel += m_intakes[i].m_system.n_fuel();
     }
 
-    constexpr double octaneMolarMass = units::mass(114.23, units::g);
     constexpr double oxygenMolarMass = units::mass(31.9988, units::g);
 
-    if (totalFuel == 0) return 0;
+    const double fuelMass = totalFuel * m_fuel.getMolecularMass();
+    if (fuelMass <= 0) return 0;
     else {
         return
             (oxygenMolarMass * totalOxygen / 0.21)
-            / (totalFuel * octaneMolarMass);
+            / fuelMass;
     }
 }
 
@@ -357,11 +357,10 @@ double Engine::getExhaustO2() const {
         totalFuel += m_exhaustSystems[i].m_system.n_fuel();
     }
 
-    constexpr double octaneMolarMass = units::mass(114.23, units::g);
     constexpr double oxygenMolarMass = units::mass(31.9988, units::g);
     constexpr double nitrogenMolarMass = units::mass(28.014, units::g);
 
-    const double totalMass = totalFuel * octaneMolarMass
+    const double totalMass = totalFuel * m_fuel.getMolecularMass()
         + nitrogenMolarMass * totalInert
         + oxygenMolarMass * totalOxygen;
     return totalMass > 0 ? oxygenMolarMass * totalOxygen / totalMass : 0;
