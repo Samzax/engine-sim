@@ -40,6 +40,11 @@ namespace es_script {
 
             Engine *engine = new Engine;
             engineNode->buildEngine(engine);
+            Engine *previous = Compiler::output()->engine;
+            if (previous != nullptr) {
+                previous->destroy();
+                delete previous;
+            }
             Compiler::output()->engine = engine;
         }
 
@@ -525,6 +530,7 @@ namespace es_script {
 
             Transmission *transmission = new Transmission;
             m_transmission->generate(transmission);
+            delete Compiler::output()->transmission;
             Compiler::output()->transmission = transmission;
         }
 
@@ -549,6 +555,7 @@ namespace es_script {
 
             Vehicle *vehicle = new Vehicle;
             vehicleNode->generate(vehicle);
+            delete Compiler::output()->vehicle;
             Compiler::output()->vehicle = vehicle;
         }
 
