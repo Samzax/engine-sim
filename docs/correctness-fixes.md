@@ -474,3 +474,11 @@ arrays alongside its GPU buffers. Initialization allocates 100000 vertices and
 200000 indices, but the shutdown path omitted `GeometryGenerator::destroy` and
 its destructor did not free them. The Release build and isolated GUI lifecycle
 check, including final shutdown, passed after adding the missing cleanup call.
+
+Removed a discarded `rand()` calculation from each channel's rendered audio
+sample. At 44100 Hz this avoids 44100 random draws per exhaust channel per
+second. The used noise draw and its filtering remain; the exact random sequence
+changes. The existing noise-channel reference was updated to remove the matching
+discarded draw, retaining its filter-state comparison. All four selected audio
+checks passed, as did the Release builds. No overall speedup is claimed without
+a workload benchmark.

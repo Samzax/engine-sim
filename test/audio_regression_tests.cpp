@@ -228,7 +228,6 @@ void noiseChannelTests() {
     std::srand(789);
     for (int sample = 0; sample < 33; ++sample) {
         for (auto &filter : reference) {
-            (void)std::rand();
             const float noise = 2.0 * ((double)std::rand() / RAND_MAX) - 1.0;
             filter.fast_f(noise);
         }
