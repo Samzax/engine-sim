@@ -394,3 +394,12 @@ index to avoid accumulated fractional increments. Empty ranges skip needle
 normalization and rendering. The Release application built successfully and
 the bar setting passed the isolated GUI reload/shutdown check; the captured
 frame was inspected for the fractional ticks and corrected color band.
+
+### Application-setting unit defaults
+
+The script defaults for `set_application_settings` now match the canonical
+unit names used by the application: `hp`, `lb-ft`, `mph`, `inHg`, and `psi`.
+Previously, specifying only a color or pressure setting supplied the uppercase
+default `MPH`, which the case-sensitive speed selector interpreted as KPH.
+An isolated GUI run with only `pressure_units: "bar"` reproduced KPH before
+the change and displayed MPH afterward. Explicitly supplied units are unchanged.
