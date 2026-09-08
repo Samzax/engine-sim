@@ -421,6 +421,7 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
         || !nonnegative(vehicle->getCrossSectionArea())
         || !nonnegative(vehicle->getRollingResistance()))
         throw std::invalid_argument("Vehicle drag coefficient, frontal area and rolling resistance must be finite and nonnegative");
+    transmission->validate();
 
     auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;

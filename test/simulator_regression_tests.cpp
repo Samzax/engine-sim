@@ -71,6 +71,17 @@ TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
         invalidVehicle.initialize(massless);
         EXPECT_THROW(engine.output.engine->createSimulator(
             &invalidVehicle, engine.output.transmission), std::invalid_argument);
+        for (double ratio : {0.0, std::numeric_limits<double>::infinity()}) {
+            Transmission invalidTransmission;
+            invalidTransmission.initialize({1, &ratio, 1000.0});
+            EXPECT_THROW(engine.output.engine->createSimulator(
+                engine.output.vehicle, &invalidTransmission), std::invalid_argument);
+        }
+        const double ratio = 1.0;
+        Transmission invalidTransmission;
+        invalidTransmission.initialize({1, &ratio, -1.0});
+        EXPECT_THROW(engine.output.engine->createSimulator(
+            engine.output.vehicle, &invalidTransmission), std::invalid_argument);
         std::unique_ptr<Simulator> simulator(engine.output.engine->createSimulator(
             engine.output.vehicle, engine.output.transmission));
         simulator->setTargetSynthesizerLatency(0);

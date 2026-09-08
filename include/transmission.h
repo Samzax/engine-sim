@@ -18,6 +18,7 @@ class Transmission {
         ~Transmission();
 
         void initialize(const Parameters &params);
+        void validate() const;
         void update(double dt);
         void addToSystem(
             atg_scs::RigidBodySystem *system,

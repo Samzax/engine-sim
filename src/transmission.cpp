@@ -3,6 +3,8 @@
 #include "../include/units.h"
 
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 Transmission::Transmission() {
     m_gear = -1;
@@ -28,6 +30,16 @@ void Transmission::initialize(const Parameters &params) {
     m_maxClutchTorque = params.MaxClutchTorque;
     m_gearRatios = new double[params.GearCount];
     memcpy(m_gearRatios, params.GearRatios, sizeof(double) * m_gearCount);
+}
+
+void Transmission::validate() const {
+    if (!std::isfinite(m_maxClutchTorque) || m_maxClutchTorque < 0)
+        throw std::invalid_argument("Transmission clutch torque must be finite and nonnegative");
+    for (int i = 0; i < m_gearCount; ++i) {
+        if (!std::isfinite(m_gearRatios[i]) || m_gearRatios[i] == 0)
+            throw std::invalid_argument("Transmission gear " + std::to_string(i + 1)
+                + " requires a finite nonzero ratio");
+    }
 }
 
 void Transmission::update(double dt) {
