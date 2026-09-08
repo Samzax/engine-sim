@@ -177,11 +177,15 @@ void LoadSimulationCluster::render() {
 
     constexpr float shortenAngle = (float)units::angle(1.0, units::deg);
     const double redline = units::toRpm((engine != nullptr) ? engine->getRedline() : 0);
-    const double maxRpm = std::floor(redline / 500.0) * 500.0;
+    const double dynoLimit = units::toRpm((engine != nullptr) ? engine->getDynoMaxSpeed() : 0);
+    const double maxRpm = std::fmax(500.0,
+        std::ceil(std::fmax(redline, dynoLimit) / 500.0) * 500.0);
     m_dynoSpeedGauge->m_gauge->m_max = (int)(maxRpm);
-    m_dynoSpeedGauge->m_gauge->setBandCount(1);
-    m_dynoSpeedGauge->m_gauge->setBand(
-        { m_app->getRed(), (float)redline, (float)maxRpm, 3.0f, 6.0f, shortenAngle, -shortenAngle }, 0);
+    m_dynoSpeedGauge->m_gauge->setBandCount(maxRpm > redline ? 1 : 0);
+    if (maxRpm > redline) {
+        m_dynoSpeedGauge->m_gauge->setBand(
+            { m_app->getRed(), (float)redline, (float)maxRpm, 3.0f, 6.0f, shortenAngle, -shortenAngle }, 0);
+    }
 
     const Bounds torqueBounds = grid.get(m_bounds, 1, 1);
     m_torqueGauge->m_gauge->m_value = m_simulator->m_dyno.m_enabled
