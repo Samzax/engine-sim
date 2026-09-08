@@ -1164,15 +1164,17 @@ void EngineSimApplication::processEngineInput() {
 }
 
 void EngineSimApplication::renderScene() {
+    const int screenWidth = m_engine.GetGameWindow()->GetGameWidth();
+    const int screenHeight = m_engine.GetGameWindow()->GetGameHeight();
+    // Minimized windows can have no client area. Keep the last valid layout
+    // until restoration instead of building zero-sized cameras and viewports.
+    if (screenWidth <= 0 || screenHeight <= 0) return;
+
     getShaders()->ResetBaseColor();
     getShaders()->SetObjectTransform(ysMath::LoadIdentity());
 
     m_textRenderer.SetColor(ysColor::linearToSrgb(m_foreground));
     m_shaders.SetClearColor(ysColor::linearToSrgb(m_shadow));
-
-    const int screenWidth = m_engine.GetGameWindow()->GetGameWidth();
-    const int screenHeight = m_engine.GetGameWindow()->GetGameHeight();
-    const float aspectRatio = screenWidth / (float)screenHeight;
 
     m_shaders.CalculateUiCamera(screenWidth, screenHeight);
 
