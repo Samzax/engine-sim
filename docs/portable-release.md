@@ -44,6 +44,13 @@ with misleading timestamps, remove `assets.ysce` to force a rebuild.
 For simulation and audio statistics without a window, use `engine-sim-headless.exe`.
 See `headless.md` for commands and controls.
 
+Video recording is optional and disabled in the default build. In builds made
+with `DTV=ON`, Insert starts or stops recording. The app creates `video_capture`
+in its working directory and writes `engine_sim_video_capture.mp4` there;
+starting another recording overwrites that file. Folder creation errors are
+reported in the status panel and `error_log.log`. Full FFmpeg recording remains
+unverified in the current validation environment.
+
 ## Building the ZIP
 
 After a Release build, run:

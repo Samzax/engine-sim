@@ -1305,8 +1305,16 @@ void EngineSimApplication::startRecording() {
     if (m_recording || !readyToRecord()) return;
     atg_dtv::Encoder::VideoSettings settings{};
 
-    // Output filename
-    settings.fname = "../workspace/video_capture/engine_sim_video_capture.mp4";
+    const std::filesystem::path outputDirectory("video_capture");
+    std::error_code directoryError;
+    std::filesystem::create_directories(outputDirectory, directoryError);
+    if (directoryError) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Cannot create video capture directory: " << directoryError.message() << '\n';
+        m_infoCluster->setLogMessage("Cannot create video_capture folder; see error_log.log");
+        return;
+    }
+    settings.fname = (outputDirectory / "engine_sim_video_capture.mp4").string();
     settings.inputWidth = m_engine.GetScreenWidth();
     settings.inputHeight = m_engine.GetScreenHeight();
     settings.width = settings.inputWidth;
