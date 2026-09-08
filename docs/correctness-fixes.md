@@ -189,3 +189,11 @@ intake and exhaust profiles produced about 0.04354 inches at their specified
 both opening and closing points within 0.00005 inches, allowing for sampled
 curve interpolation. This correction changes valve timing and may affect
 performance and sound for existing profiles with gamma other than one.
+
+### Ignition at the cycle boundary
+
+Spark detection now handles events on both sides of the 720-to-zero-degree
+wrap. Previously, a step spanning that boundary skipped events just before
+the wrap by shifting every event into the next cycle. Reverse rotation had
+the corresponding error. A regression reproduces both missed sparks and
+checks that the corrected events do not fire again on the following step.

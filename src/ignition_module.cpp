@@ -65,7 +65,8 @@ void IgnitionModule::update(double dt) {
             if (m_crankshaft->m_body.v_theta < 0) {
                 if (r1 < r0) {
                     r1 += fourPi;
-                    adjustedAngle += fourPi;
+                    // Only move events after the wrap into the next cycle.
+                    if (adjustedAngle < r0) adjustedAngle += fourPi;
                 }
 
                 if (adjustedAngle >= r0 && adjustedAngle < r1) {
@@ -75,7 +76,7 @@ void IgnitionModule::update(double dt) {
             else {
                 if (r1 > r0) {
                     r1 -= fourPi;
-                    adjustedAngle -= fourPi;
+                    if (adjustedAngle >= r0) adjustedAngle -= fourPi;
                 }
 
                 if (adjustedAngle >= r1 && adjustedAngle < r0) {

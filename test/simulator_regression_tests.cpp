@@ -48,6 +48,38 @@ TEST(SimulatorRegression, RoadDragOpposesBothRotationDirections) {
     EXPECT_NEAR(finalSpeeds[0], finalSpeeds[1], 1e-10);
 }
 
+TEST(SimulatorRegression, IgnitionFiresAcrossCycleBoundaryInBothDirections) {
+    const double cycle = 4 * constants::pi;
+    for (bool reverse : {false, true}) {
+        Crankshaft crank;
+        Function timing;
+        timing.initialize(0, 1.0);
+        timing.addSample(0, 0);
+        IgnitionModule ignition;
+        ignition.initialize({3, &crank, &timing});
+        ignition.m_enabled = true;
+        ignition.setFiringOrder(0, cycle - 0.005);
+        ignition.setFiringOrder(1, 0.005);
+        ignition.setFiringOrder(2, cycle / 2);
+        crank.m_body.v_theta = reverse ? 100 : -100;
+        crank.m_body.theta = -(reverse ? 0.01 : cycle - 0.01);
+        ignition.reset();
+        crank.m_body.theta = -(reverse ? cycle - 0.01 : 0.01);
+        ignition.update(0.0002);
+        EXPECT_TRUE(ignition.getIgnitionEvent(0)) << "reverse=" << reverse;
+        EXPECT_TRUE(ignition.getIgnitionEvent(1)) << "reverse=" << reverse;
+        EXPECT_FALSE(ignition.getIgnitionEvent(2));
+        ignition.resetIgnitionEvents();
+        crank.m_body.theta = -(reverse ? cycle - 0.02 : 0.02);
+        ignition.update(0.0001);
+        for (int cylinder = 0; cylinder < 3; ++cylinder) {
+            EXPECT_FALSE(ignition.getIgnitionEvent(cylinder));
+        }
+        ignition.destroy();
+        timing.destroy();
+    }
+}
+
 TEST(SimulatorRegression, InvalidEngineRejectedBeforeSimulatorInitialization) {
     Vehicle vehicle;
     Transmission transmission;
