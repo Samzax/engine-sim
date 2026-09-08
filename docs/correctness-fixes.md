@@ -468,3 +468,9 @@ peak torque, peak power, and their associated RPM remained exactly unchanged
 through every disabled frame. The starter remained engaged, so these readings
 are diagnostic loads rather than engine performance measurements. The temporary
 trace and control overrides were restored, and the normal executable rebuilt.
+
+Application shutdown now releases the geometry generator's CPU vertex and index
+arrays alongside its GPU buffers. Initialization allocates 100000 vertices and
+200000 indices, but the shutdown path omitted `GeometryGenerator::destroy` and
+its destructor did not free them. The Release build and isolated GUI lifecycle
+check, including final shutdown, passed after adding the missing cleanup call.

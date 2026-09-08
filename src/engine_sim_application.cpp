@@ -668,6 +668,7 @@ void EngineSimApplication::destroy() {
 
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryIndexBuffer);
+    m_geometryGenerator.destroy();
 
     m_assetManager.Destroy();
     m_engine.Destroy();
