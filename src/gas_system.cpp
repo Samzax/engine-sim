@@ -200,8 +200,10 @@ ES_GAS_DEFINITION double GasSystem::react(double n, const Mix &mix) {
         const double carbon = (mix.fuelMolecularMass - 4 * 0.001008 * s) / (0.012011 - 4 * 0.001008);
         const double water = 2 * (s - carbon);
         if (!(s > 0) || carbon < 0 || water < 0) return 0;
-        const double burned = (std::max)(0.0, (std::min)({n_fuel(), n * mix.p_fuel,
-            n_o2() / s, n * mix.p_o2 / s}));
+        // Pairwise limits also work in device code. The MSVC/NVCC initializer-
+        // list overload produced zero burn in the CUDA chamber regression.
+        const double burned = (std::max)(0.0, (std::min)((std::min)((std::min)(
+            n_fuel(), n * mix.p_fuel), n_o2() / s), n * mix.p_o2 / s));
         if (burned == 0) return 0;
         const double oldN = this->n();
         const double oldReference = energyAtTemperature(298.15);

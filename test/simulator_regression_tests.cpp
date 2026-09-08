@@ -2,6 +2,8 @@
 #include "../scripting/include/compiler.h"
 #include "../include/simulator.h"
 #include "../include/piston_engine_simulator.h"
+#include "../include/gpu_chamber.h"
+#include "../include/gpu_pipe.h"
 #include "../include/constants.h"
 #include "../include/vehicle_drag_constraint.h"
 #include "../include/vtec_valvetrain.h"
@@ -333,7 +335,35 @@ TEST(SimulatorRegression, SeparatedPortsPreserveSharedReservoirAndCylinderEvolut
                 constexpr double dt=1e-7;
                 for(int j=0;j<reference->getCylinderCount();++j) reference->getChamber(j)->flowPorts(dt);
                 for(int j=0;j<separated->getCylinderCount();++j) separated->getChamber(j)->flowReservoirPorts(dt);
+                std::vector<gpu_chamber::Cylinder> deviceCylinders;
+                if(gpu_pipe::enabled()) for(int j=0;j<separated->getCylinderCount();++j) {
+                    auto *chamber=separated->getChamber(j);
+                    deviceCylinders.push_back({chamber->cylinderFlowState(),chamber->cylinderFlowParameters(),
+                        chamber->intakePipe()->last(),chamber->exhaustPipe()->first()});
+                }
                 for(int j=0;j<separated->getCylinderCount();++j) separated->getChamber(j)->flowCylinderPorts(dt);
+                if(!deviceCylinders.empty()) {
+                    gpu_chamber::advance(deviceCylinders.data(),static_cast<int>(deviceCylinders.size()),dt);
+                    for(int j=0;j<separated->getCylinderCount();++j) {
+                        auto *chamber=separated->getChamber(j);
+                        const auto state=chamber->cylinderFlowState();
+                        const auto &device=deviceCylinders[j];
+                        for(auto pair : {std::make_pair(&device.state.system,&state.system),
+                                std::make_pair(&device.intake,static_cast<const GasSystem *>(&chamber->intakePipe()->last())),
+                                std::make_pair(&device.exhaust,static_cast<const GasSystem *>(&chamber->exhaustPipe()->first()))}) {
+                            EXPECT_NEAR(pair.first->n(),pair.second->n(),1e-9*(std::max)(1e-10,pair.second->n()));
+                            EXPECT_NEAR(pair.first->totalEnergy(),pair.second->totalEnergy(),1e-8*(std::max)(1.0,pair.second->totalEnergy()));
+                        }
+                        EXPECT_EQ(device.state.lit,state.lit);
+                        EXPECT_NEAR(device.state.thermal.wallTemperature(),state.thermal.wallTemperature(),1e-7);
+                        EXPECT_NEAR(device.state.thermal.coolantEnergy(),state.thermal.coolantEnergy(),1e-9);
+                        EXPECT_NEAR(device.state.burntFuel,state.burntFuel,1e-12);
+                        EXPECT_NEAR(device.state.totalIntakeFlow,state.totalIntakeFlow,1e-12);
+                        EXPECT_NEAR(device.state.totalExhaustFlow,state.totalExhaustFlow,1e-12);
+                        // Exercise importing a packet without perturbing the exact CPU reference.
+                        chamber->applyCylinderFlowState(state);
+                    }
+                }
                 for(int variant=0;variant<2;++variant)
                     GasPipe::advanceBatch(pipes[variant].data(),static_cast<int>(pipes[variant].size()),dt);
                 for(int j=0;j<reference->getCylinderCount();++j) {

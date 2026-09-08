@@ -1,3 +1,4 @@
+#include "../include/gpu_chamber.h"
 #include <gtest/gtest.h>
 
 #include "../include/gas_system.h"
@@ -1168,4 +1169,99 @@ TEST(GasSystemTests, GasVelocityStabilizesInClosedSystem) {
 
     csv.writeCsv("gas_system_test_output.csv", nullptr, '\t');
     csv.destroy();
+}
+
+TEST(GasSystemTests, CudaCylinderStagesMatchCpuHeatAndCombustion) {
+    if(!gpu_pipe::enabled()) GTEST_SKIP() << "Set ENGINE_SIM_GPU=1 in a CUDA build";
+    std::vector<gpu_chamber::Cylinder> actual;
+    std::vector<bool> thermalEnabled;
+    for(bool advanced : {false,true}) for(bool thermal : {false,true})
+        for(int mode=0;mode<3;++mode) for(double temperature : {150.,300.,999.,1001.,2500.,7000.}) {
+            gpu_chamber::Cylinder c;
+            auto &p=c.parameters;
+            p.volume=.0005; p.bore=.085; p.boreArea=constants::pi*p.bore*p.bore/4;
+            p.cylinderHeight=p.volume/p.boreArea;
+            p.surfaceArea=p.cylinderHeight*constants::pi*p.bore+2*p.boreArea;
+            p.meanPistonSpeed=12; p.crankcasePressure=101325;
+            p.blowbyK=mode==2?GasSystem::k_28inH2O(.01):0;
+            p.intakeK=mode==1?GasSystem::k_28inH2O(50):0;
+            p.exhaustK=mode==1?GasSystem::k_28inH2O(70):0;
+            p.intakeArea=p.exhaustArea=.001;
+            p.fuelMass=.114232; p.fuelEnergyDensity=44e6;
+            GasSystem::Mix mix{.015,.795,.19};
+            for(auto *gas : {&c.state.system,&c.intake,&c.exhaust}) {
+                gas->setVariableProperties(advanced);
+                gas->initialize(gas==&c.state.system?3e5:1e5,p.volume,temperature,mix);
+                gas->setGeometry(.1,.1,1,0);
+            }
+            CylinderThermalModel::Parameters heat;
+            heat.enabled=thermal; heat.initialWallTemperature=500; heat.coolantTemperature=300;
+            c.state.thermal.initialize(heat);
+            c.state.lit=true;
+            c.state.flame.globalMix=mix; c.state.flame.lastVolume=p.volume;
+            c.state.flame.total_n=c.state.system.n(); c.state.flame.flameSpeed=10;
+            actual.push_back(c);
+            thermalEnabled.push_back(thermal);
+        }
+    auto expected=actual;
+    // Reaction enthalpy uses a 298.15 K reference and a delta-n RT correction.
+    const auto accountedEnergy=[](const gpu_chamber::Cylinder &c) {
+        double energy=c.state.thermal.wallHeatCapacity()*c.state.thermal.wallTemperature()
+            +c.state.thermal.coolantEnergy()-c.state.burntFuel*c.parameters.fuelEnergyDensity;
+        for(const auto *gas : {&c.state.system,&c.intake,&c.exhaust})
+            energy+=gas->totalEnergy()-gas->energyAtTemperature(298.15)-gas->n()*constants::R*298.15;
+        return energy;
+    };
+    std::vector<double> initialEnergy,initialMass;
+    for(const auto &c:actual) {
+        initialEnergy.push_back(accountedEnergy(c));
+        initialMass.push_back(c.state.system.mass()+c.intake.mass()+c.exhaust.mass());
+    }
+    const auto close=[](double a,double b,double floor=1e-8) {
+        EXPECT_NEAR(a,b,2e-8*(std::max)(floor,std::abs(b)));
+    };
+    bool sawBurn=false,sawExtinction=false;
+    for(int step=0;step<30;++step) {
+        constexpr double dt=1e-5;
+        for(auto &c:expected) chamber_flow::advanceDistributed(chamber_flow::view(c.state),c.parameters,c.intake,c.exhaust,dt);
+        gpu_chamber::advance(actual.data(),static_cast<int>(actual.size()),dt);
+        for(size_t i=0;i<actual.size();++i) {
+            SCOPED_TRACE(i);
+            SCOPED_TRACE(step);
+            const auto &a=actual[i],&b=expected[i];
+            for(auto pair : {std::make_pair(&a.state.system,&b.state.system),
+                    std::make_pair(&a.intake,&b.intake),std::make_pair(&a.exhaust,&b.exhaust)}) {
+                close(pair.first->n(),pair.second->n());
+                close(pair.first->totalEnergy(),pair.second->totalEnergy());
+                close(pair.first->temperature(),pair.second->temperature());
+                close(pair.first->pressure(),pair.second->pressure());
+                EXPECT_NEAR(pair.first->velocity_x(),pair.second->velocity_x(),1e-7);
+                EXPECT_NEAR(pair.first->velocity_y(),pair.second->velocity_y(),1e-7);
+                close(pair.first->mix().p_fuel,pair.second->mix().p_fuel);
+                close(pair.first->mix().p_o2,pair.second->mix().p_o2);
+                close(pair.first->mix().p_co2,pair.second->mix().p_co2);
+                close(pair.first->mix().p_h2o,pair.second->mix().p_h2o);
+                close(pair.first->mix().residualFraction,pair.second->mix().residualFraction);
+            }
+            EXPECT_EQ(a.state.lit,b.state.lit);
+            close(a.state.thermal.wallTemperature(),b.state.thermal.wallTemperature());
+            close(a.state.thermal.coolantEnergy(),b.state.thermal.coolantEnergy());
+            close(a.state.peakTemperature,b.state.peakTemperature);
+            close(a.state.burntFuel,b.state.burntFuel,1e-12);
+            close(a.state.exhaustFlow,b.state.exhaustFlow);
+            close(a.state.totalExhaustFlow,b.state.totalExhaustFlow);
+            close(a.state.totalIntakeFlow,b.state.totalIntakeFlow);
+            close(a.state.flame.lit_n,b.state.flame.lit_n);
+            close(a.state.flame.percentageLit,b.state.flame.percentageLit);
+            close(a.state.flame.travel_x,b.state.flame.travel_x);
+            close(a.state.flame.travel_y,b.state.flame.travel_y);
+            sawBurn|=a.state.burntFuel>0; sawExtinction|=!a.state.lit;
+            // Advanced closed systems account for chemical heat and coolant loss.
+            if(a.state.system.variableProperties() && a.parameters.blowbyK==0 && thermalEnabled[i]) {
+                EXPECT_NEAR(a.state.system.mass()+a.intake.mass()+a.exhaust.mass(),initialMass[i],1e-10*initialMass[i]);
+                EXPECT_NEAR(accountedEnergy(a),initialEnergy[i],1e-10*std::abs(initialEnergy[i]));
+            }
+        }
+    }
+    EXPECT_TRUE(sawBurn); EXPECT_TRUE(sawExtinction);
 }

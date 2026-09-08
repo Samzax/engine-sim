@@ -186,6 +186,45 @@ The RTX 3090 runtime reports cooperative-launch support and 82 multiprocessors.
 This makes a synchronized multi-block coupled kernel worth investigating; actual
 kernel occupancy, correctness, and real-time performance remain unproven.
 
+### Shared cylinder stages
+
+`chamber_flow.h` now supplies the numerical cylinder stage to CPU execution and
+CUDA: wall/coolant exchange, blowby, ordered intake/exhaust valve transfers,
+velocity damping, flame extinction, burn advancement and fuel/flow counters.
+`CombustionChamber` can export and import its gas, thermal and flame state as a
+value packet. CPU execution uses references to its existing state, avoiding a
+copy on every fluid substep. Mechanical updates, oil evolution, ignition and
+dynamic flame-speed preparation retain their existing CPU ordering.
+
+`gpu_chamber::advance` validates independent cylinder packets after reservoir
+ports and before pipe interiors. This interface is still a development batch,
+not the live coupled scheduler. It does not yet remove the per-fluid-step GPU
+round trips. Reservoir/atmosphere updates and the adaptive pipe loop still need
+to join the device scheduling path.
+
+The cylinder comparison covers 72 combinations of gas-property mode, thermal
+mode, valve/blowby configuration and 150–7000 K over 30 consecutive steps. It
+checks gas, wall, coolant, flame and flow results, and verifies closed-system
+mass and energy accounting, including reaction enthalpy's 298.15 K reference
+and delta-n RT correction. The test initially exposed a CUDA reaction-limit
+selection error: the initializer-list minimum returned zero burn. Explicit
+pairwise minima fixed it without changing the CPU limits. The comparison then
+passed, including under NVIDIA memcheck with zero errors.
+
+The separated-port regression also exports real Hayabusa and V12 cylinder states
+at 2, 8 and 64 pipe cells, compares the CUDA cylinder stage against CPU execution,
+and exercises state import. The original exact CPU interleaved-versus-separated
+comparison remains in place. These checks establish numerical implementation
+agreement over the tested cases, not real-time performance or measured-engine
+calibration.
+
+A fresh CPU-only build passed 56 selected checks; three CUDA-only checks were
+skipped and exercised separately in the CUDA build. Before/after Hayabusa and
+V12 runs on both backends retained printed RPM, temperature, coolant and friction
+outputs. Audio RMS/clipping varied in some runs, including repeat invocations of
+the same executable; subsequent Hayabusa repeats matched the baseline. These
+observations do not establish byte-identical audio or a speedup.
+
 ### Phase profiling and closed ports
 
 Configure a diagnostic build with `-DENGINE_SIM_PROFILE=ON` to print inclusive

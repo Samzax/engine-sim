@@ -1,5 +1,6 @@
 #include "../include/gpu_pipe.h"
 #include "../include/gpu_gas.h"
+#include "../include/gpu_chamber.h"
 #include "../include/simulation_profile.h"
 #include "../include/gas_thermo.h"
 #include <cuda_runtime.h>
@@ -18,6 +19,12 @@ namespace gpu_pipe {
 namespace {
 __constant__ double cp[5][2][5];
 __constant__ double minimumCvRatio[5];
+__global__ void solveCylinders(gpu_chamber::Cylinder *cylinders,int count,double dt) {
+    const int index=blockIdx.x*blockDim.x+threadIdx.x;
+    if(index>=count) return;
+    auto &c=cylinders[index];
+    chamber_flow::advanceDistributed(chamber_flow::view(c.state),c.parameters,c.intake,c.exhaust,dt);
+}
 __global__ void solveTransfers(gpu_gas::Transfer *transfers,int count) {
     const int index=blockIdx.x*blockDim.x+threadIdx.x;
     if(index>=count) return;
@@ -283,5 +290,38 @@ void advance(Transfer *transfers,int count) {
         throw;
     }
     std::copy(result.begin(),result.end(),transfers);
+}
+}
+
+namespace gpu_chamber {
+void advance(Cylinder *cylinders,int count,double dt) {
+    if(!cylinders || count<1 || count>4096 || !std::isfinite(dt) || dt<0)
+        throw std::invalid_argument("Invalid CUDA cylinder batch");
+    for(int i=0;i<count;++i) {
+        const auto &p=cylinders[i].parameters;
+        for(double value : {p.volume,p.cylinderHeight,p.bore,p.boreArea,p.fuelMass})
+            if(!std::isfinite(value) || value<=0) throw std::invalid_argument("Invalid CUDA cylinder geometry or fuel mass");
+        for(double value : {p.surfaceArea,p.blowbyK,p.crankcasePressure,p.intakeK,p.exhaustK,
+                p.intakeArea,p.exhaustArea,p.fuelEnergyDensity})
+            if(!std::isfinite(value) || value<0) throw std::invalid_argument("Invalid CUDA cylinder flow parameters");
+        if(!std::isfinite(p.meanPistonSpeed)) throw std::invalid_argument("Invalid CUDA mean piston speed");
+    }
+    auto &context=gpu_pipe::context();
+    std::vector<Cylinder> result(count);
+    Cylinder *device=nullptr;
+    const size_t bytes=static_cast<size_t>(count)*sizeof(Cylinder);
+    try {
+        gpu_pipe::check(cudaMalloc(&device,bytes),"CUDA cylinder allocation");
+        gpu_pipe::check(cudaMemcpyAsync(device,cylinders,bytes,cudaMemcpyHostToDevice,context.stream),"CUDA cylinder upload");
+        gpu_pipe::solveCylinders<<<(count+63)/64,64,0,context.stream>>>(device,count,dt);
+        gpu_pipe::check(cudaGetLastError(),"CUDA cylinder launch");
+        gpu_pipe::check(cudaMemcpyAsync(result.data(),device,bytes,cudaMemcpyDeviceToHost,context.stream),"CUDA cylinder download");
+        gpu_pipe::check(cudaStreamSynchronize(context.stream),"CUDA cylinder completion");
+        gpu_pipe::check(cudaFree(device),"CUDA cylinder release"); device=nullptr;
+    } catch(...) {
+        if(device) cudaFree(device);
+        throw;
+    }
+    std::copy(result.begin(),result.end(),cylinders);
 }
 }

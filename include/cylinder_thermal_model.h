@@ -31,14 +31,14 @@ public:
     }
 
     // Hohenberg: V in m^3, p in bar, T in K, mean piston speed in m/s.
-    static double coefficient(double volume, double pressure, double temperature,
+    ES_GAS_FUNCTION static double coefficient(double volume, double pressure, double temperature,
         double meanPistonSpeed) {
         if (volume <= 0 || pressure <= 0 || temperature <= 0) return 0;
         return 130.0 * std::pow(volume, -0.06) * std::pow(pressure / 1e5, 0.8)
             * std::pow(temperature, -0.4) * std::pow(std::abs(meanPistonSpeed) + 1.4, 0.8);
     }
 
-    void exchange(GasSystem &gas, double area, double meanPistonSpeed, double dt) {
+    ES_GAS_FUNCTION void exchange(GasSystem &gas, double area, double meanPistonSpeed, double dt) {
         if (dt <= 0) return;
         if (!m_parameters.enabled) {
             gas.changeEnergy((363.15 - gas.temperature()) * area * 100.0 * dt);
@@ -54,8 +54,8 @@ public:
         if (gas.variableProperties() && cg > 0) {
             const double initialEnergy = gas.kineticEnergy();
             const double oldWall = m_wallTemperature;
-            double low = (std::min)({tg, oldWall, m_parameters.coolantTemperature});
-            double high = (std::max)({tg, oldWall, m_parameters.coolantTemperature});
+            double low = (std::min)((std::min)(tg, oldWall), m_parameters.coolantTemperature);
+            double high = (std::max)((std::max)(tg, oldWall), m_parameters.coolantTemperature);
             double t = tg;
             for (int i = 0; i < 32; ++i) {
                 const double delta = gas.energyAtTemperature(t) - initialEnergy;
@@ -83,11 +83,11 @@ public:
         m_wallTemperature = tw;
     }
 
-    double wallTemperature() const { return m_wallTemperature; }
-    double coolantEnergy() const { return m_coolantEnergy; }
-    double wallHeatCapacity() const { return m_parameters.wallHeatCapacity; }
-    double coolantTemperature() const { return m_parameters.coolantTemperature; }
-    void addWallEnergy(double energy) {
+    ES_GAS_FUNCTION double wallTemperature() const { return m_wallTemperature; }
+    ES_GAS_FUNCTION double coolantEnergy() const { return m_coolantEnergy; }
+    ES_GAS_FUNCTION double wallHeatCapacity() const { return m_parameters.wallHeatCapacity; }
+    ES_GAS_FUNCTION double coolantTemperature() const { return m_parameters.coolantTemperature; }
+    ES_GAS_FUNCTION void addWallEnergy(double energy) {
         if (m_parameters.enabled) m_wallTemperature += energy/m_parameters.wallHeatCapacity;
     }
 

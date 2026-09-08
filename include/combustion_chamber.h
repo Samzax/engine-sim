@@ -11,6 +11,7 @@
 #include "cylinder_thermal_model.h"
 #include "lubrication_model.h"
 #include "gas_pipe.h"
+#include "chamber_flow.h"
 
 class Engine;
 class CombustionChamber : public atg_scs::ForceGenerator {
@@ -31,20 +32,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double pipeFrictionFactor = 0.02;
         };
 
-        struct FlameEvent {
-            double lit_n = 0;
-            double total_n = 0;
-            double percentageLit = 0;
-            double efficiency = 1.0;
-            double flameSpeed = 0.0;
-            double ignitionTemperature = 300, ignitionPressure = 101325;
-            double unburnedTemperature = 300;
-
-            double lastVolume = 0.0;
-            double travel_x = 0.0;
-            double travel_y = 0.0;
-            GasSystem::Mix globalMix;
-        };
+        using FlameEvent = chamber_flow::FlameEvent;
 
         struct FrictionModelParams {
             double frictionCoeff = 0.06;
@@ -83,6 +71,9 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         bool supportsSeparatedPorts() const { return m_intakePipe.active() && m_exhaustPipe.active(); }
         void flowReservoirPorts(double dt);
         void flowCylinderPorts(double dt);
+        chamber_flow::Parameters cylinderFlowParameters() const;
+        chamber_flow::State cylinderFlowState() const;
+        void applyCylinderFlowState(const chamber_flow::State &state);
         GasPipe *intakePipe() { return &m_intakePipe; }
         GasPipe *exhaustPipe() { return &m_exhaustPipe; }
         void aggregatePipes() {
@@ -161,6 +152,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         LubricationModel m_lubrication;
         GasPipe m_intakePipe, m_exhaustPipe;
         void flowStep(double dt, bool deferPipes=false, bool reservoirPortsDone=false);
+        chamber_flow::View cylinderFlowView();
         void flowIntakeReservoir(double dt);
         void flowExhaustReservoir(double dt);
 };

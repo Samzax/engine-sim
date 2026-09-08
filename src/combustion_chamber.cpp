@@ -293,29 +293,48 @@ void CombustionChamber::flowReservoirPorts(double dt) {
 
 void CombustionChamber::flowCylinderPorts(double dt) {
     if(!supportsSeparatedPorts()) throw std::logic_error("Separated ports require distributed intake and exhaust pipes");
-    flowStep(dt,true,true);
+    chamber_flow::advanceDistributed(cylinderFlowView(), cylinderFlowParameters(),
+        m_intakePipe.last(), m_exhaustPipe.first(), dt);
+}
+
+chamber_flow::Parameters CombustionChamber::cylinderFlowParameters() const {
+    const auto *bank=m_head->getCylinderBank();
+    const double volume=getVolume();
+    const double height=volume/m_cylinderCrossSectionSurfaceArea;
+    return {volume,height,height*constants::pi*bank->getBore()+m_cylinderCrossSectionSurfaceArea*2,
+        bank->getBore(),bank->boreSurfaceArea(),calculateMeanPistonSpeed(),
+        m_piston->getBlowbyK(),m_crankcasePressure,m_intakeFlowRate,m_exhaustFlowRate,
+        m_head->getIntakeRunnerCrossSectionArea(),m_head->getExhaustRunnerCrossSectionArea(),
+        m_fuel->getMolecularMass(),m_fuel->getEnergyDensity()};
+}
+
+chamber_flow::View CombustionChamber::cylinderFlowView() {
+    return {m_system,m_thermal,m_flameEvent,m_lit,m_peakTemperature,m_nBurntFuel,
+        m_exhaustFlow,m_lastTimestepTotalExhaustFlow,m_lastTimestepTotalIntakeFlow};
+}
+
+chamber_flow::State CombustionChamber::cylinderFlowState() const {
+    return {m_system,m_thermal,m_flameEvent,m_lit,m_peakTemperature,m_nBurntFuel,
+        m_exhaustFlow,m_lastTimestepTotalExhaustFlow,m_lastTimestepTotalIntakeFlow};
+}
+
+void CombustionChamber::applyCylinderFlowState(const chamber_flow::State &state) {
+    m_system=state.system; m_thermal=state.thermal; m_flameEvent=state.flame;
+    m_lit=state.lit; m_peakTemperature=state.peakTemperature; m_nBurntFuel=state.burntFuel;
+    m_exhaustFlow=state.exhaustFlow; m_lastTimestepTotalExhaustFlow=state.totalExhaustFlow;
+    m_lastTimestepTotalIntakeFlow=state.totalIntakeFlow;
 }
 
 void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPortsDone) {
-    if (m_system.temperature() > m_peakTemperature) {
-        m_peakTemperature = m_system.temperature();
-    }
-
-    const double volume = getVolume();
-    const double cylinderHeight = volume / m_cylinderCrossSectionSurfaceArea;
-    const double cylinderSurfaceArea =
-        cylinderHeight * constants::pi * m_head->getCylinderBank()->getBore()
-        + m_cylinderCrossSectionSurfaceArea * 2;
-
-    m_thermal.exchange(m_system, cylinderSurfaceArea, calculateMeanPistonSpeed(), dt);
-    m_system.flow(m_piston->getBlowbyK(), dt, m_crankcasePressure, units::celcius(25.0));
+    const auto parameters = cylinderFlowParameters();
+    const double volume = parameters.volume;
+    const double cylinderHeight = parameters.cylinderHeight;
+    chamber_flow::begin(cylinderFlowView(), parameters, dt);
 
     Intake *intake = m_head->getIntake(m_piston->getCylinderIndex());
     ExhaustSystem *exhaust = m_head->getExhaustSystem(m_piston->getCylinderIndex());
     GasSystem *intakeOut=m_intakePipe.active() ? &m_intakePipe.last() : &m_intakeRunnerAndManifold;
     GasSystem *exhaustIn=m_exhaustPipe.active() ? &m_exhaustPipe.first() : &m_exhaustRunnerAndPrimary;
-
-    const double start_n = m_system.n();
 
     GasSystem::FlowParameters flowParams;
     flowParams.dt = dt;
@@ -359,54 +378,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPorts
         if (!deferPipes) m_exhaustPipe.aggregate(m_exhaustRunnerAndPrimary);
     } else m_exhaustRunnerAndPrimary.updateVelocity(dt, exhaust->getVelocityDecay());
 
-    if (std::abs(intakeFlow) > 1E-9 && m_lit) {
-        m_lit = false;
-    }
-
-    m_exhaustFlow = exhaustFlow;
-    m_lastTimestepTotalExhaustFlow += exhaustFlow;
-    m_lastTimestepTotalIntakeFlow += intakeFlow;
-
-    if (m_lit) {
-        CylinderBank *bank = m_head->getCylinderBank();
-        const double totalTravel_x = bank->getBore() / 2;
-        const double totalTravel_y = volume / bank->boreSurfaceArea();
-        const double expansion = volume / m_flameEvent.lastVolume;
-        const double lastTravel_x = m_flameEvent.travel_x;
-        const double lastTravel_y = m_flameEvent.travel_y * expansion;
-        const double flameSpeed = m_flameEvent.flameSpeed;
-
-        m_flameEvent.travel_x =
-            std::fmin(lastTravel_x + dt * flameSpeed, totalTravel_x);
-        m_flameEvent.travel_y =
-            std::fmin(lastTravel_y + dt * flameSpeed, totalTravel_y);
-
-        if (lastTravel_x < m_flameEvent.travel_x || lastTravel_y < m_flameEvent.travel_y) {
-            const double burnedVolume =
-                m_flameEvent.travel_x * m_flameEvent.travel_x
-                * constants::pi * m_flameEvent.travel_y;
-            const double prevBurnedVolume =
-                lastTravel_x * lastTravel_x * constants::pi * lastTravel_y;
-            const double litVolume = burnedVolume - prevBurnedVolume;
-            const double n = (litVolume / volume) * m_system.n();
-
-            const double fuelBurned =
-                m_system.react(n * m_flameEvent.efficiency, m_flameEvent.globalMix);
-            const double massFuelBurned = fuelBurned * m_fuel->getMolecularMass();
-            m_system.changeEnergy(
-                massFuelBurned * m_fuel->getEnergyDensity());
-
-            m_flameEvent.lit_n += n;
-            m_flameEvent.percentageLit += litVolume / volume;
-
-            m_nBurntFuel += massFuelBurned;
-        }
-        else {
-            m_lit = false;
-        }
-
-        m_flameEvent.lastVolume = volume;
-    }
+    chamber_flow::finish(cylinderFlowView(), parameters, intakeFlow, exhaustFlow, dt);
 }
 
 double CombustionChamber::lastEventAfr() const {
