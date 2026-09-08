@@ -42,6 +42,7 @@ install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION .)
 install(FILES "${PROJECT_BINARY_DIR}/generated/$<CONFIG>/build-info.txt" DESTINATION .)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/portable-release.md" DESTINATION . RENAME README.md)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/headless.md" DESTINATION .)
+install(FILES "${PROJECT_SOURCE_DIR}/docs/physics-realism.md" DESTINATION .)
 foreach(_dependency delta-studio csv-io simple-2d-constraint-solver)
     install(FILES "${PROJECT_SOURCE_DIR}/dependencies/submodules/${_dependency}/LICENSE"
         DESTINATION licenses RENAME "${_dependency}.txt")

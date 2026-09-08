@@ -65,21 +65,25 @@ void Intake::destroy() {
 }
 
 void Intake::process(double dt) {
-    const double ideal_afr = 0.8 * m_molecularAfr * 4;
-    const double current_afr = (m_system.mix().p_o2 + m_system.mix().p_inert) / m_system.mix().p_fuel;
+    const double oxygenFraction = m_system.variableProperties() ? 0.21 : 0.25;
+    const double ideal_afr = m_system.variableProperties() ? m_molecularAfr / oxygenFraction : 0.8 * m_molecularAfr * 4;
 
     const double p_air = ideal_afr / (1 + ideal_afr);
     GasSystem::Mix fuelAirMix;
+    fuelAirMix.fuelMolecularMass = m_fuelMass;
+    fuelAirMix.oxygenPerFuel = m_oxygenPerFuel;
     fuelAirMix.p_fuel = 1 - p_air;
-    fuelAirMix.p_inert = p_air * 0.75;
-    fuelAirMix.p_o2 = p_air * 0.25;
+    fuelAirMix.p_inert = p_air * (1-oxygenFraction);
+    fuelAirMix.p_o2 = p_air * oxygenFraction;
 
     const double idle_afr = 2.0;
     const double p_idle_air = idle_afr / (1 + idle_afr);
     GasSystem::Mix fuelMix;
+    fuelMix.fuelMolecularMass = m_fuelMass;
+    fuelMix.oxygenPerFuel = m_oxygenPerFuel;
     fuelMix.p_fuel = (1.0 - p_idle_air);
-    fuelMix.p_inert = p_idle_air * 0.75;
-    fuelMix.p_o2 = p_idle_air * 0.25;
+    fuelMix.p_inert = p_idle_air * (1-oxygenFraction);
+    fuelMix.p_o2 = p_idle_air * oxygenFraction;
 
     const double throttle = getThrottlePlatePosition();
     const double flowAttenuation = std::cos(throttle * constants::pi / 2);

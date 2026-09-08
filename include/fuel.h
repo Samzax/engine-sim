@@ -12,7 +12,7 @@ class Fuel {
         struct Parameters {
             std::string name = "Gasoline";
             double molecularMass =
-                units::mass(100.0, units::g);
+                units::mass(114.232, units::g);
             double energyDensity =
                 units::energy(48.1, units::kJ) / units::mass(1.0, units::g);
             double density =
@@ -46,7 +46,7 @@ class Fuel {
             double T,
             double P,
             double firingPressure,
-            double motoringPressure) const;
+            double motoringPressure, double residualFraction = 0.0) const;
         virtual double laminarBurningVelocity(double molecularAfr, double T, double P) const;
 
         double getMolecularAfr() const { return m_molecularAfr; }

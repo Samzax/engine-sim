@@ -70,6 +70,10 @@ void ExhaustSystem::process(double dt) {
     airMix.p_fuel = 0;
     airMix.p_inert = 1.0;
     airMix.p_o2 = 0.0;
+    if (m_system.variableProperties()) {
+        airMix.p_inert = 0.79;
+        airMix.p_o2 = 0.21;
+    }
 
     m_atmosphere.reset(units::pressure(1.0, units::atm), units::celcius(25.0), airMix);
     GasSystem::FlowParameters flowParams;

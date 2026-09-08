@@ -50,7 +50,7 @@ private node turbulence_to_flame_speed_ratio_default {
 
 public node fuel => __engine_sim__fuel {
     input name [string]: "Gasoline [Default]";
-    input molecular_mass [float]: 100 * units.g;
+    input molecular_mass [float]: 114.232 * units.g;
     input energy_density [float]: 48.1 * units.kJ / units.g;
     input density [float]: 0.755 * units.kg / units.L;
     input molecular_afr [float]: 25 / 2.0;
@@ -83,6 +83,18 @@ private node _engine => __engine_sim__engine {
     input dyno_max_speed [float];
     input dyno_hold_step [float];
     input thermal_model [bool];
+    input variable_gas_properties [bool];
+    input dynamic_combustion [bool];
+    input pipe_cells [int];
+    input pipe_friction_factor [float];
+    input oil_model [bool];
+    input oil_temperature [float];
+    input oil_viscosity_40 [float];
+    input oil_viscosity_100 [float];
+    input oil_heat_capacity [float];
+    input oil_wall_conductance [float];
+    input oil_coolant_conductance [float];
+    input friction_scale [float];
     input wall_temperature [float];
     input coolant_temperature [float];
     input wall_heat_capacity [float];
@@ -111,6 +123,18 @@ public node engine {
     input dyno_max_speed: redline;
     input dyno_hold_step: 100 * units.rpm;
     input thermal_model: true;
+    input variable_gas_properties: true;
+    input dynamic_combustion: true;
+    input pipe_cells: 8;
+    input pipe_friction_factor: 0.02;
+    input oil_model: true;
+    input oil_temperature: 363.15; // K
+    input oil_viscosity_40: 80.0; // cSt at 40 C
+    input oil_viscosity_100: 10.5; // cSt at 100 C
+    input oil_heat_capacity: 2000.0; // J/K per cylinder
+    input oil_wall_conductance: 10.0; // W/K per cylinder
+    input oil_coolant_conductance: 5.0; // W/K per cylinder
+    input friction_scale: 1.0;
     input wall_temperature: 363.15; // K
     input coolant_temperature: 363.15; // K, prescribed reservoir
     input wall_heat_capacity: 4000.0; // J/K per cylinder
@@ -138,6 +162,18 @@ public node engine {
             dyno_max_speed: dyno_max_speed,
             dyno_hold_step: dyno_hold_step,
             thermal_model: thermal_model,
+            variable_gas_properties: variable_gas_properties,
+            dynamic_combustion: dynamic_combustion,
+            pipe_cells: pipe_cells,
+            pipe_friction_factor: pipe_friction_factor,
+            oil_model: oil_model,
+            oil_temperature: oil_temperature,
+            oil_viscosity_40: oil_viscosity_40,
+            oil_viscosity_100: oil_viscosity_100,
+            oil_heat_capacity: oil_heat_capacity,
+            oil_wall_conductance: oil_wall_conductance,
+            oil_coolant_conductance: oil_coolant_conductance,
+            friction_scale: friction_scale,
             wall_temperature: wall_temperature,
             coolant_temperature: coolant_temperature,
             wall_heat_capacity: wall_heat_capacity,

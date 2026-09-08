@@ -178,6 +178,10 @@ namespace es_script {
             ccParams.StartingTemperature = units::celcius(25.0);
             ccParams.MeanPistonSpeedToTurbulence = meanPistonSpeedToTurbulence;
             ccParams.thermal = m_parameters.thermal;
+            ccParams.dynamicCombustion = m_parameters.dynamicCombustion;
+            ccParams.lubrication = m_parameters.lubrication;
+            ccParams.pipeCells = m_parameters.pipeCells;
+            ccParams.pipeFrictionFactor = m_parameters.pipeFrictionFactor;
 
             for (int i = 0; i < engine->getCylinderCount(); ++i) {
                 ccParams.Piston = engine->getPiston(i);
@@ -213,6 +217,18 @@ namespace es_script {
             addInput("dyno_max_speed", &m_parameters.dynoMaxSpeed);
             addInput("dyno_hold_step", &m_parameters.dynoHoldStep);
             addInput("thermal_model", &m_parameters.thermal.enabled);
+            addInput("variable_gas_properties", &m_parameters.variableGasProperties);
+            addInput("dynamic_combustion", &m_parameters.dynamicCombustion);
+            addInput("pipe_cells", &m_parameters.pipeCells);
+            addInput("pipe_friction_factor", &m_parameters.pipeFrictionFactor);
+            addInput("oil_model", &m_parameters.lubrication.enabled);
+            addInput("oil_temperature", &m_parameters.lubrication.initialTemperature);
+            addInput("oil_viscosity_40", &m_parameters.lubrication.viscosity40);
+            addInput("oil_viscosity_100", &m_parameters.lubrication.viscosity100);
+            addInput("oil_heat_capacity", &m_parameters.lubrication.heatCapacity);
+            addInput("oil_wall_conductance", &m_parameters.lubrication.wallConductance);
+            addInput("oil_coolant_conductance", &m_parameters.lubrication.coolantConductance);
+            addInput("friction_scale", &m_parameters.lubrication.frictionScale);
             addInput("wall_temperature", &m_parameters.thermal.initialWallTemperature);
             addInput("coolant_temperature", &m_parameters.thermal.coolantTemperature);
             addInput("wall_heat_capacity", &m_parameters.thermal.wallHeatCapacity);

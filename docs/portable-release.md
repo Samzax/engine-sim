@@ -4,6 +4,9 @@ Extract the entire ZIP to a writable folder, then open `engine-sim-app.exe`.
 Keep the DLLs, `assets`, `es`, and `engine` folders beside it. The application
 needs no installer, but the graphics runtime requirements below still apply.
 
+The updated physics models and their comparison/performance settings are described
+in [physics-realism.md](physics-realism.md).
+
 Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed reloads leave the current engine running.
 If the initial script fails, the status instead says no engine is loaded.

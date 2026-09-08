@@ -40,20 +40,24 @@ double Fuel::flameSpeed(
     double T,
     double P,
     double firingPressure,
-    double motoringPressure) const
+    double motoringPressure, double residualFraction) const
 {
-    const double S_L = laminarBurningVelocity(molecularAfr, T, P);
+    const double S_L = laminarBurningVelocity(molecularAfr, T, P)
+        * std::fmax(0.0, 1.0 - 2.1*residualFraction);
+    if (!(S_L > 0) || !std::isfinite(S_L)) return 0;
     const double p_adjustment = 1.0;
 
     return m_turbulenceToFlameSpeedRatio->sampleTriangle((turbulence / S_L) * p_adjustment) * S_L;
 }
 
 double Fuel::laminarBurningVelocity(double molecularAfr, double T, double P) const {
+    if (!(molecularAfr > 0) || !(T > 0) || !(P > 0)) return 0;
     // Assuming fuel is gasoline
     constexpr double er_m = 1.21;
     constexpr double B_m = units::distance(30.5, units::cm) / units::sec;
     constexpr double B_er = -units::distance(54.9, units::cm) / units::sec;
-    const double er = molecularAfr / m_molecularAfr;
+    // Equivalence ratio is stoichiometric O2/fuel divided by actual O2/fuel.
+    const double er = m_molecularAfr / molecularAfr;
     const double alpha = 2.4 - 0.271 * std::pow(er, 3.51);
     const double beta = -0.357 + 0.14 * std::pow(er, 2.77);
 
@@ -61,5 +65,5 @@ double Fuel::laminarBurningVelocity(double molecularAfr, double T, double P) con
     const double T_ratio = T / units::kelvin(298);
     const double P_ratio = P / units::pressure(1.0, units::atm);
 
-    return S_L_0 * std::pow(T_ratio, alpha) * std::pow(P_ratio, beta);
+    return std::fmax(0.0, S_L_0) * std::pow(T_ratio, alpha) * std::pow(P_ratio, beta);
 }

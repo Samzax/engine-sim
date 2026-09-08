@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_CYLINDER_THERMAL_MODEL_H
 
 #include "gas_system.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -50,6 +51,28 @@ public:
         const double gh = dt * conductance;
         const double gc = dt * m_parameters.coolantConductance;
         const double cw = m_parameters.wallHeatCapacity;
+        if (gas.variableProperties() && cg > 0) {
+            const double initialEnergy = gas.kineticEnergy();
+            const double oldWall = m_wallTemperature;
+            double low = (std::min)({tg, oldWall, m_parameters.coolantTemperature});
+            double high = (std::max)({tg, oldWall, m_parameters.coolantTemperature});
+            double t = tg;
+            for (int i = 0; i < 32; ++i) {
+                const double delta = gas.energyAtTemperature(t) - initialEnergy;
+                const double wall = (cw*oldWall + gc*m_parameters.coolantTemperature - delta)/(cw+gc);
+                const double residual = delta - gh*(wall-t);
+                if (std::abs(residual) < 1e-10 * (std::max)(1.0, initialEnergy)) break;
+                if (residual > 0) high = t; else low = t;
+                const double derivative = gas.heatCapacity(t)*(1+gh/(cw+gc)) + gh;
+                const double next = t-residual/derivative;
+                t = next > low && next < high ? next : (low+high)/2;
+            }
+            const double delta = gas.energyAtTemperature(t)-initialEnergy;
+            m_wallTemperature = (cw*oldWall + gc*m_parameters.coolantTemperature-delta)/(cw+gc);
+            gas.changeEnergy(delta);
+            m_coolantEnergy += gc*(m_wallTemperature-m_parameters.coolantTemperature);
+            return;
+        }
         // Backward Euler for the coupled gas/metal system. Eliminating the gas
         // unknown makes the wall update a positive weighted temperature average.
         const double coupling = cg > 0 ? gh / (1.0 + gh / cg) : 0;
@@ -62,6 +85,11 @@ public:
 
     double wallTemperature() const { return m_wallTemperature; }
     double coolantEnergy() const { return m_coolantEnergy; }
+    double wallHeatCapacity() const { return m_parameters.wallHeatCapacity; }
+    double coolantTemperature() const { return m_parameters.coolantTemperature; }
+    void addWallEnergy(double energy) {
+        if (m_parameters.enabled) m_wallTemperature += energy/m_parameters.wallHeatCapacity;
+    }
 
 private:
     Parameters m_parameters;

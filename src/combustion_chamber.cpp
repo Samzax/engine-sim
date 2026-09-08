@@ -46,6 +46,8 @@ CombustionChamber::~CombustionChamber() {
 
 void CombustionChamber::initialize(const Parameters &params) {
     m_thermal.initialize(params.thermal);
+    m_dynamicCombustion = params.dynamicCombustion;
+    m_lubrication.initialize(params.lubrication);
     m_piston = params.Piston;
     m_head = params.Head;
     m_fuel = params.Fuel;
@@ -54,6 +56,7 @@ void CombustionChamber::initialize(const Parameters &params) {
 
     m_pistonSpeed = new double[StateSamples];
     m_pressure = new double[StateSamples];
+    m_pistonSpeedSum = 0;
     for (int i = 0; i < StateSamples; ++i) {
         m_pistonSpeed[i] = 0;
         m_pressure[i] = 0;
@@ -108,6 +111,8 @@ void CombustionChamber::initialize(const Parameters &params) {
         exhaustRunnerWidth,
         1.0,
         0.0);
+    m_intakePipe.initialize(m_intakeRunnerAndManifold,overallIntakeRunnerLength,intakeRunnerCrossSection,params.pipeCells,params.pipeFrictionFactor);
+    m_exhaustPipe.initialize(m_exhaustRunnerAndPrimary,overallExhaustRunnerLength,exhaustRunnerCrossSection,params.pipeCells,params.pipeFrictionFactor);
 }
 
 void CombustionChamber::destroy() {
@@ -142,13 +147,7 @@ double CombustionChamber::pistonSpeed() const {
 }
 
 double CombustionChamber::calculateMeanPistonSpeed() const {
-    double avg = 0;
-    for (int i = 0; i < StateSamples; ++i) {
-        avg += m_pistonSpeed[i];
-    }
-
-    avg /= StateSamples;
-    return avg;
+    return m_pistonSpeedSum / StateSamples;
 }
 
 double CombustionChamber::calculateFiringPressure() const {
@@ -174,7 +173,7 @@ void CombustionChamber::ignite() {
         if (m_system.mix().p_fuel == 0) return;
 
         const double afr = m_system.mix().p_o2 / m_system.mix().p_fuel;
-        const double equivalenceRatio = afr / m_fuel->getMolecularAfr();
+        const double equivalenceRatio = m_fuel->getMolecularAfr() / afr;
         if (equivalenceRatio < 0.5) return;
         else if (equivalenceRatio > 1.9) return;
 
@@ -188,6 +187,9 @@ void CombustionChamber::ignite() {
         m_flameEvent.total_n = m_system.n();
         m_flameEvent.percentageLit = 0;
         m_flameEvent.globalMix = m_system.mix();
+        m_flameEvent.ignitionTemperature = m_system.temperature();
+        m_flameEvent.ignitionPressure = m_system.pressure();
+        m_flameEvent.unburnedTemperature = m_system.temperature();
         m_lit = true;
         m_litLastFrame = true;
 
@@ -222,7 +224,9 @@ void CombustionChamber::ignite() {
             m_system.temperature(),
             m_system.pressure(),
             calculateFiringPressure(),
-            units::pressure(160, units::psi));
+            units::pressure(160, units::psi),
+            m_dynamicCombustion ? m_flameEvent.globalMix.residualFraction : 0);
+        if (!(m_flameEvent.flameSpeed > 0)) m_lit = false;
     }
 }
 
@@ -230,12 +234,39 @@ void CombustionChamber::update(double dt) {
     m_system.setVolume(getVolume());
 
     updateCycleStates();
+    m_lubrication.advance(dt, std::abs(getFrictionForce()*pistonSpeed()), m_thermal);
+    if (m_dynamicCombustion && m_lit) {
+        const auto &mix = m_flameEvent.globalMix;
+        const double gamma = m_system.variableProperties()
+            ? 1 + constants::R/GasSystem::mixtureCv(m_flameEvent.unburnedTemperature, mix)
+            : m_system.heatCapacityRatio();
+        // Approximate unburned-zone compression; using bulk burned-gas
+        // temperature here would spuriously accelerate the remaining flame.
+        m_flameEvent.unburnedTemperature = m_flameEvent.ignitionTemperature
+            * std::pow(m_system.pressure()/m_flameEvent.ignitionPressure, (gamma-1)/gamma);
+        m_flameEvent.flameSpeed = m_fuel->flameSpeed(
+            m_meanPistonSpeedToTurbulence->sampleTriangle(calculateMeanPistonSpeed()),
+            mix.p_o2/mix.p_fuel, m_flameEvent.unburnedTemperature,
+            m_system.pressure(), 0, 0, mix.residualFraction);
+    }
 
     m_intakeFlowRate = m_head->intakeFlowRate(m_piston->getCylinderIndex());
     m_exhaustFlowRate = m_head->exhaustFlowRate(m_piston->getCylinderIndex());
 }
 
 void CombustionChamber::flow(double dt) {
+    int steps=0;
+    while (dt>0) {
+        if (++steps>10000) throw std::runtime_error("Cylinder pipe coupling requires excessive substeps; increase simulation frequency");
+        double h=dt;
+        if (m_intakePipe.active()) h=(std::min)(h,m_intakePipe.stableTimestep());
+        if (m_exhaustPipe.active()) h=(std::min)(h,m_exhaustPipe.stableTimestep());
+        flowStep(h);
+        dt-=h;
+    }
+}
+
+void CombustionChamber::flowStep(double dt) {
     if (m_system.temperature() > m_peakTemperature) {
         m_peakTemperature = m_system.temperature();
     }
@@ -251,6 +282,10 @@ void CombustionChamber::flow(double dt) {
 
     Intake *intake = m_head->getIntake(m_piston->getCylinderIndex());
     ExhaustSystem *exhaust = m_head->getExhaustSystem(m_piston->getCylinderIndex());
+    GasSystem *intakeIn=m_intakePipe.active() ? &m_intakePipe.first() : &m_intakeRunnerAndManifold;
+    GasSystem *intakeOut=m_intakePipe.active() ? &m_intakePipe.last() : &m_intakeRunnerAndManifold;
+    GasSystem *exhaustIn=m_exhaustPipe.active() ? &m_exhaustPipe.first() : &m_exhaustRunnerAndPrimary;
+    GasSystem *exhaustOut=m_exhaustPipe.active() ? &m_exhaustPipe.last() : &m_exhaustRunnerAndPrimary;
 
     const double start_n = m_system.n();
 
@@ -263,7 +298,7 @@ void CombustionChamber::flow(double dt) {
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;
     flowParams.system_0 = &intake->m_system;
-    flowParams.system_1 = &m_intakeRunnerAndManifold;
+    flowParams.system_1 = intakeIn;
     GasSystem::flow(flowParams);
 
     m_intakeRunnerAndManifold.dissipateExcessVelocity();
@@ -273,7 +308,7 @@ void CombustionChamber::flow(double dt) {
     flowParams.crossSectionArea_1 = volume / cylinderHeight;
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;
-    flowParams.system_0 = &m_intakeRunnerAndManifold;
+    flowParams.system_0 = intakeOut;
     flowParams.system_1 = &m_system;
     const double intakeFlow = GasSystem::flow(flowParams);
 
@@ -286,7 +321,7 @@ void CombustionChamber::flow(double dt) {
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;
     flowParams.system_0 = &m_system;
-    flowParams.system_1 = &m_exhaustRunnerAndPrimary;
+    flowParams.system_1 = exhaustIn;
     const double exhaustFlow = GasSystem::flow(flowParams);
 
     m_system.dissipateExcessVelocity();
@@ -297,13 +332,19 @@ void CombustionChamber::flow(double dt) {
     flowParams.crossSectionArea_1 = exhaust->getCollectorCrossSectionArea();
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;
-    flowParams.system_0 = &m_exhaustRunnerAndPrimary;
+    flowParams.system_0 = exhaustOut;
     flowParams.system_1 = exhaust->getSystem();
     GasSystem::flow(flowParams);
 
-    m_intakeRunnerAndManifold.updateVelocity(dt, intake->getVelocityDecay());
+    if (m_intakePipe.active()) {
+        m_intakePipe.advance(dt);
+        m_intakePipe.aggregate(m_intakeRunnerAndManifold);
+    } else m_intakeRunnerAndManifold.updateVelocity(dt, intake->getVelocityDecay());
     m_system.updateVelocity(dt, 0.5);
-    m_exhaustRunnerAndPrimary.updateVelocity(dt, exhaust->getVelocityDecay());
+    if (m_exhaustPipe.active()) {
+        m_exhaustPipe.advance(dt);
+        m_exhaustPipe.aggregate(m_exhaustRunnerAndPrimary);
+    } else m_exhaustRunnerAndPrimary.updateVelocity(dt, exhaust->getVelocityDecay());
 
     if (std::abs(intakeFlow) > 1E-9 && m_lit) {
         m_lit = false;
@@ -360,7 +401,7 @@ double CombustionChamber::lastEventAfr() const {
     const double totalOxygen = m_flameEvent.globalMix.p_o2 * m_flameEvent.total_n;
     const double totalInert = m_flameEvent.globalMix.p_inert * m_flameEvent.total_n;
 
-    constexpr double octaneMolarMass = units::mass(114.23, units::g);
+    const double fuelMolarMass = m_fuel->getMolecularMass();
     constexpr double oxygenMolarMass = units::mass(31.9988, units::g);
     constexpr double nitrogenMolarMass = units::mass(28.014, units::g);
 
@@ -368,7 +409,7 @@ double CombustionChamber::lastEventAfr() const {
     else {
         return
             (oxygenMolarMass * totalOxygen + totalInert * nitrogenMolarMass)
-            / (totalFuel * octaneMolarMass);
+            / (totalFuel * fuelMolarMass);
     }
 }
 
@@ -381,13 +422,13 @@ double CombustionChamber::calculateFrictionForce(double v_s) const {
     const double F_brk = m_frictionModel.breakawayFriction;
     const double v = std::abs(v_s);
 
-    const double F_0 = constants::root_2 * constants::e * (F_brk - F_coul);
+    const double F_0 = constants::root_2 * constants::e * std::fmax(0.0, F_brk - F_coul);
     const double F_1 = v / v_st;
     const double F_2 = std::exp(-F_1 * F_1) * F_1;
     const double F_3 = F_coul * std::tanh(v / v_coul);
-    const double F_4 = m_frictionModel.viscousFrictionCoefficient * v;
+    const double F_4 = m_frictionModel.viscousFrictionCoefficient * v * m_lubrication.viscousMultiplier();
 
-    return F_0 * F_2 + F_3 + F_4;
+    return (F_0 * F_2 + F_3 + F_4) * m_lubrication.frictionScale();
 }
 
 void CombustionChamber::updateCycleStates() {
@@ -398,7 +439,9 @@ void CombustionChamber::updateCycleStates() {
 
     const int i = (int)std::round((crankAngle / (4 * constants::pi)) * (StateSamples - 1.0));
 
-    m_pistonSpeed[i] = std::abs(pistonSpeed());
+    const double speed = std::abs(pistonSpeed());
+    m_pistonSpeedSum += speed - m_pistonSpeed[i];
+    m_pistonSpeed[i] = speed;
     m_pressure[i] = m_system.pressure();
 }
 

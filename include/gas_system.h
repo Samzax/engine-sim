@@ -8,11 +8,18 @@
 #include <cmath>
 
 class GasSystem {
+    friend class GasPipe;
     public:
         struct Mix {
             double p_fuel = 0.0;
             double p_inert = 1.0;
             double p_o2 = 0.0;
+            // Products are a subset of p_inert, retained for old script/gauge APIs.
+            double p_co2 = 0.0;
+            double p_h2o = 0.0;
+            double residualFraction = 0.0; // passive burned-gas mass fraction
+            double fuelMolecularMass = 0.114232; // kg/mol
+            double oxygenPerFuel = 12.5;
         };
 
         struct State {
@@ -39,6 +46,15 @@ class GasSystem {
         void setGeometry(double width, double height, double dx, double dy);
         void initialize(double P, double V, double T, const Mix &mix = {}, int degreesOfFreedom = 5);
         void reset(double P, double T, const Mix &mix = {});
+        void setVariableProperties(bool enabled);
+        bool variableProperties() const { return m_variableProperties; }
+        static double molecularMass(const Mix &mix);
+        static double mixtureEnergy(double temperature, const Mix &mix);
+        static double mixtureCv(double temperature, const Mix &mix);
+        double energyAtTemperature(double temperature) const;
+        double heatCapacity(double temperature) const;
+        double molarEnergy(double temperature) const;
+        double molarCv(double temperature) const;
 
         void setVolume(double V);
         void setN(double n);
@@ -95,7 +111,7 @@ class GasSystem {
         inline double dynamicPressure(double dx, double dy) const;
         inline double mass() const;
         inline double pressure() const;
-        inline double temperature() const;
+        double temperature() const;
         inline double velocity_x() const;
         inline double velocity_y() const;
         inline double volume() const;
@@ -118,6 +134,13 @@ class GasSystem {
         double m_height = 0.0;
         double m_dx = 0.0;
         double m_dy = 0.0;
+        bool m_variableProperties = false;
+        mutable double m_cachedEnergy = -1, m_cachedN = -1, m_cachedTemperature = 300;
+        void refreshProperties() const;
+        mutable bool m_propertiesValid = false;
+        mutable double m_lowCp[5]{}, m_highCp[5]{};
+        mutable double m_u200 = 0, m_u1000 = 0, m_u6000 = 0;
+        mutable double m_cv200 = 0, m_cv6000 = 0, m_molarMass = 0;
 };
 
 inline constexpr double GasSystem::kineticEnergyPerMol(double T, int degreesOfFreedom) {
@@ -142,7 +165,7 @@ inline double GasSystem::chokedFlowRate(int degreesOfFreedom) {
 }
 
 inline double GasSystem::approximateDensity() const {
-    return (units::AirMolecularMass * n()) / volume();
+    return mass() / volume();
 }
 
 inline double GasSystem::n() const {
@@ -213,6 +236,7 @@ inline double GasSystem::dynamicPressure(double dx, double dy) const {
     // staticPressure * pow(1 + ((hcr - 1) / 2) * machNumber * machNumber, hcr / (hcr - 1)) - 1)
 
     const double x = 1 + ((hcr - 1) / 2) * machNumber_squared;
+    if (m_variableProperties) return staticPressure * (std::pow(x, hcr / (hcr - 1)) - 1);
     double x_d;
     switch (m_degreesOfFreedom) {
     case 3:
@@ -233,20 +257,18 @@ inline double GasSystem::dynamicPressure(double dx, double dy) const {
 }
 
 inline double GasSystem::mass() const {
+    if (m_variableProperties) { refreshProperties(); return m_molarMass * n(); }
     return units::AirMolecularMass * n();
 }
 
 inline double GasSystem::pressure() const {
+    if (m_variableProperties) return volume() > 0 ? n() * constants::R * temperature() / volume() : 0;
     const double volume = this->volume();
     return (volume != 0)
         ? kineticEnergy() / (0.5 * m_degreesOfFreedom * volume)
         : 0;
 }
 
-inline double GasSystem::temperature() const {
-    if (n() == 0) return 0;
-    else return kineticEnergy() / (0.5 * m_degreesOfFreedom * n() * constants::R);
-}
 
 inline double GasSystem::velocity_x() const {
     if (n() == 0) return 0;
@@ -279,6 +301,7 @@ inline double GasSystem::n_o2() const {
 }
 
 inline double GasSystem::heatCapacityRatio() const {
+    if (m_variableProperties) return 1 + constants::R / molarCv(temperature());
     return heatCapacityRatio(m_degreesOfFreedom);
 }
 

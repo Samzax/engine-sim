@@ -2,6 +2,9 @@
 
 #include "../include/gas_system.h"
 #include "../include/cylinder_thermal_model.h"
+#include "../include/fuel.h"
+#include "../include/lubrication_model.h"
+#include "../include/gas_pipe.h"
 #include "../include/units.h"
 #include "../include/csv_io.h"
 
@@ -47,6 +50,126 @@ TEST(GasSystemTests, CylinderThermalEquilibriumAndLargeStep) {
 TEST(GasSystemTests, GasSystemSanity) {
     GasSystem system;
     system.initialize(0.0, 0.0, 0.0);
+}
+
+TEST(GasSystemTests, DistributedPipeWaveTravelAndConservation) {
+    GasSystem prototype;
+    prototype.setVariableProperties(true);
+    const GasSystem::Mix air{0,0.79,0.21};
+    prototype.initialize(1e5,0.001,300,air);
+    GasPipe pipe;
+    pipe.initialize(prototype,1.0,0.001,64);
+    double mass=0,energy=0;
+    const double gamma=prototype.heatCapacityRatio();
+    for (int i=0;i<pipe.count();++i) {
+        const double p=1e5+100*std::cos(constants::pi*(i+0.5)/pipe.count());
+        pipe.cell(i).initialize(p,0.001/pipe.count(),300*std::pow(p/1e5,(gamma-1)/gamma),air);
+        mass+=pipe.cell(i).mass(); energy+=pipe.cell(i).totalEnergy();
+    }
+    // Half a period of the fundamental closed-pipe standing acoustic wave.
+    pipe.advance(1.0/prototype.c());
+    double finalMass=0,finalEnergy=0;
+    for (int i=0;i<pipe.count();++i) {
+        finalMass+=pipe.cell(i).mass(); finalEnergy+=pipe.cell(i).totalEnergy();
+    }
+    EXPECT_NEAR(finalMass,mass,1e-12);
+    EXPECT_NEAR(finalEnergy,energy,1e-7);
+    EXPECT_LT(pipe.first().pressure(),1e5-50);
+    EXPECT_GT(pipe.last().pressure(),1e5+50);
+}
+
+TEST(GasSystemTests, OilViscosityAndFrictionHeatBalance) {
+    CylinderThermalModel wall;
+    CylinderThermalModel::Parameters wp;
+    wp.initialWallTemperature=400;
+    wp.coolantTemperature=300;
+    wall.initialize(wp);
+    LubricationModel oil;
+    LubricationModel::Parameters p;
+    p.initialTemperature=300;
+    oil.initialize(p);
+    EXPECT_NEAR(oil.viscosity(313.15),p.viscosity40,1e-8);
+    EXPECT_NEAR(oil.viscosity(373.15),p.viscosity100,1e-8);
+    EXPECT_GT(oil.viscousMultiplier(),1);
+    const double initial=wp.wallHeatCapacity*wall.wallTemperature()+p.heatCapacity*oil.temperature();
+    for (int i=0;i<100;++i) oil.advance(0.1,1000,wall);
+    EXPECT_NEAR(oil.frictionEnergy(),10000,1e-8);
+    EXPECT_NEAR(wp.wallHeatCapacity*wall.wallTemperature()+p.heatCapacity*oil.temperature()
+        +oil.coolantEnergy()-oil.frictionEnergy(),initial,initial*1e-11);
+    EXPECT_GT(oil.temperature(),300);
+}
+
+TEST(GasSystemTests, FlameSpeedRespondsToMixtureTemperatureAndDilution) {
+    Function turbulence;
+    turbulence.initialize(2, 1);
+    turbulence.addSample(0,1); turbulence.addSample(100,1);
+    Fuel::Parameters p;
+    p.turbulenceToFlameSpeedRatio=&turbulence;
+    Fuel fuel;
+    fuel.initialize(p);
+    const double rich=p.molecularAfr/1.21;
+    const double reference=fuel.laminarBurningVelocity(rich,298,units::atm);
+    EXPECT_NEAR(reference,0.305,1e-12);
+    EXPECT_LT(fuel.laminarBurningVelocity(p.molecularAfr/0.8,298,units::atm),reference);
+    EXPECT_GT(fuel.laminarBurningVelocity(rich,400,units::atm),reference);
+    EXPECT_LT(fuel.laminarBurningVelocity(rich,298,2*units::atm),reference);
+    EXPECT_LT(fuel.flameSpeed(0,rich,298,units::atm,0,0,0.1),reference);
+    EXPECT_EQ(fuel.flameSpeed(0,rich,298,units::atm,0,0,0.6),0);
+    turbulence.destroy();
+}
+
+TEST(GasSystemTests, VariablePropertiesTemperatureAndReactionMass) {
+    GasSystem gas;
+    gas.setVariableProperties(true);
+    GasSystem::Mix mix{1.0/60.5, 47.0/60.5, 12.5/60.5};
+    for (double t : {150.0, 300.0, 999.9, 1000.1, 2500.0, 6000.0, 7000.0}) {
+        gas.initialize(1e5, 0.001, t, mix);
+        EXPECT_NEAR(gas.temperature(), t, 1e-5);
+        EXPECT_NEAR(gas.pressure(), 1e5, 0.01);
+    }
+    gas.initialize(1e5, 0.001, 300, mix);
+    const double mass = gas.mass();
+    const double fuel = gas.n_fuel();
+    const double burned = gas.react(gas.n(), mix);
+    EXPECT_NEAR(burned, fuel, 1e-12);
+    EXPECT_NEAR(gas.mass(), mass, 1e-12);
+    EXPECT_NEAR(gas.mix().p_co2 * gas.n(), 8 * fuel, 1e-12);
+    EXPECT_NEAR(gas.mix().p_h2o * gas.n(), 9 * fuel, 1e-12);
+    gas.changeEnergy(burned * mix.fuelMolecularMass * 44e6);
+    EXPECT_GT(gas.temperature(), 1000);
+    EXPECT_LT(gas.heatCapacityRatio(), 1.4);
+}
+
+TEST(GasSystemTests, VariableMixtureFlowConservesMassAndEnergy) {
+    GasSystem a, b;
+    a.setVariableProperties(true); b.setVariableProperties(true);
+    GasSystem::Mix products{0, 0.9, 0.1};
+    products.p_co2 = 0.15; products.p_h2o = 0.2;
+    a.initialize(4e5, 0.001, 1200, products);
+    b.initialize(1e5, 0.002, 300, {0,0.79,0.21});
+    const double mass = a.mass()+b.mass(), energy = a.totalEnergy()+b.totalEnergy();
+    const double co2 = a.n()*a.mix().p_co2;
+    GasSystem::FlowParameters p{GasSystem::k_28inH2O(100), 1e-5, 1, 0, 0.002, 0.002, &a, &b};
+    for (int i=0; i<100; ++i) GasSystem::flow(p);
+    EXPECT_NEAR(a.mass()+b.mass(), mass, 1e-12);
+    EXPECT_NEAR(a.totalEnergy()+b.totalEnergy(), energy, 1e-7);
+    EXPECT_NEAR(a.n()*a.mix().p_co2+b.n()*b.mix().p_co2, co2, 1e-12);
+}
+
+TEST(GasSystemTests, VariableHeatCapacityWallEnergyBalance) {
+    GasSystem gas;
+    gas.setVariableProperties(true);
+    GasSystem::Mix products{0, 1, 0};
+    products.p_co2=0.2; products.p_h2o=0.3;
+    gas.initialize(5e5, 0.0005, 2500, products);
+    CylinderThermalModel thermal;
+    CylinderThermalModel::Parameters p;
+    thermal.initialize(p);
+    const double initial=gas.kineticEnergy()+p.wallHeatCapacity*thermal.wallTemperature();
+    for (int i=0; i<100; ++i) thermal.exchange(gas, 0.04, 10, 0.01);
+    EXPECT_NEAR(gas.kineticEnergy()+p.wallHeatCapacity*thermal.wallTemperature()+thermal.coolantEnergy(), initial, initial*1e-11);
+    EXPECT_GE(gas.temperature(), p.coolantTemperature);
+    EXPECT_LE(gas.temperature(), 2500);
 }
 
 TEST(GasSystemTests, AdiabaticEnergyConservation) {

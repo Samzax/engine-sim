@@ -40,6 +40,11 @@ class Engine : public Part {
             double dynoMaxSpeed = units::rpm(6500);
             double dynoHoldStep = units::rpm(100);
             CylinderThermalModel::Parameters thermal;
+            bool variableGasProperties = true;
+            bool dynamicCombustion = true;
+            LubricationModel::Parameters lubrication;
+            int pipeCells = 8;
+            double pipeFrictionFactor = 0.02;
 
             Throttle *throttle;
 
@@ -75,6 +80,7 @@ class Engine : public Part {
         virtual double getRpm() const;
         virtual double getSpeed() const;
         double getVehicleSpeed() const { return m_vehicleSpeed; }
+        bool variableGasProperties() const { return m_variableGasProperties; }
         void setVehicleSpeed(double speed) { m_vehicleSpeed = speed; }
         virtual bool isSpinningCw() const;
 
@@ -124,6 +130,7 @@ class Engine : public Part {
     protected:
         std::string m_name;
         double m_vehicleSpeed = 0.0;
+        bool m_variableGasProperties = true;
 
         Crankshaft *m_crankshafts;
         int m_crankshaftCount;

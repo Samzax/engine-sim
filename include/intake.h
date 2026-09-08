@@ -44,6 +44,13 @@ class Intake : public Part {
         virtual void destroy();
 
         void process(double dt);
+        void configureGas(bool enabled, double fuelMass, double oxygenPerFuel) {
+            m_system.setVariableProperties(enabled);
+            m_atmosphere.setVariableProperties(enabled);
+            if (enabled) m_system.reset(m_system.pressure(),m_system.temperature(),{0,0.79,0.21});
+            m_fuelMass = fuelMass;
+            m_oxygenPerFuel = oxygenPerFuel;
+        }
 
         inline double getRunnerFlowRate() const { return m_runnerFlowRate; }
         inline double getThrottlePlatePosition() const { return m_idleThrottlePlatePosition * m_throttle; }
@@ -69,6 +76,8 @@ class Intake : public Part {
         double m_velocityDecay;
 
         GasSystem m_atmosphere;
+        double m_fuelMass = 0.114232;
+        double m_oxygenPerFuel = 12.5;
 };
 
 #endif /* ATG_ENGINE_SIM_INTAKE_H */

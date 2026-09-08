@@ -59,6 +59,7 @@ Engine::~Engine() {
 }
 
 void Engine::initialize(const Parameters &params) {
+    m_variableGasProperties = params.variableGasProperties;
     m_crankshaftCount = params.crankshaftCount;
     m_cylinderCount = params.cylinderCount;
     m_cylinderBankCount = params.cylinderBanks;
@@ -335,6 +336,10 @@ double Engine::getIntakeAfr() const {
     double totalFuel = 0.0;
     for (int i = 0; i < m_intakeCount; ++i) {
         totalInert += m_intakes[i].m_system.n_inert();
+        if (m_intakes[i].m_system.variableProperties()) {
+            const auto mix = m_intakes[i].m_system.mix();
+            totalInert -= m_intakes[i].m_system.n() * (mix.p_co2+mix.p_h2o);
+        }
         totalOxygen += m_intakes[i].m_system.n_o2();
         totalFuel += m_intakes[i].m_system.n_fuel();
     }
@@ -348,6 +353,14 @@ double Engine::getIntakeAfr() const {
 }
 
 double Engine::getExhaustO2() const {
+    if (m_exhaustSystemCount > 0 && m_exhaustSystems[0].m_system.variableProperties()) {
+        double oxygenMass=0, totalMass=0;
+        for (int i=0; i<m_exhaustSystemCount; ++i) {
+            oxygenMass += 0.0319988 * m_exhaustSystems[i].m_system.n_o2();
+            totalMass += m_exhaustSystems[i].m_system.mass();
+        }
+        return totalMass>0 ? oxygenMass/totalMass : 0;
+    }
     double totalInert = 0.0;
     double totalOxygen = 0.0;
     double totalFuel = 0.0;
@@ -408,6 +421,12 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
 
     const auto positive = [](double value) { return std::isfinite(value) && value > 0; };
     const auto nonnegative = [](double value) { return std::isfinite(value) && value >= 0; };
+    if (m_variableGasProperties) {
+        const double s=m_fuel.getMolecularAfr(), mw=m_fuel.getMolecularMass();
+        const double carbon=(mw-4*0.001008*s)/(0.012011-4*0.001008);
+        if (!positive(s) || !positive(mw) || !nonnegative(carbon) || !nonnegative(s-carbon))
+            throw std::invalid_argument("Variable gas properties require hydrocarbon-compatible fuel molecular mass and oxygen/fuel ratio");
+    }
     if (!nonnegative(m_dynoMinSpeed) || !nonnegative(m_dynoMaxSpeed)
         || m_dynoMaxSpeed < m_dynoMinSpeed)
         throw std::invalid_argument("Dyno speed limits must be finite and nonnegative, with maximum at least minimum");

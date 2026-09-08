@@ -9,6 +9,8 @@
 #include "units.h"
 #include "fuel.h"
 #include "cylinder_thermal_model.h"
+#include "lubrication_model.h"
+#include "gas_pipe.h"
 
 class Engine;
 class CombustionChamber : public atg_scs::ForceGenerator {
@@ -23,6 +25,10 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double StartingTemperature;
             double CrankcasePressure;
             CylinderThermalModel::Parameters thermal;
+            bool dynamicCombustion = true;
+            LubricationModel::Parameters lubrication;
+            int pipeCells = 8;
+            double pipeFrictionFactor = 0.02;
         };
 
         struct FlameEvent {
@@ -31,6 +37,8 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double percentageLit = 0;
             double efficiency = 1.0;
             double flameSpeed = 0.0;
+            double ignitionTemperature = 300, ignitionPressure = 101325;
+            double unburnedTemperature = 300;
 
             double lastVolume = 0.0;
             double travel_x = 0.0;
@@ -69,10 +77,23 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void ignite();
         void update(double dt);
         void flow(double dt);
+        void configureGas(bool enabled, double fuelMass, double oxygenPerFuel) {
+            m_system.setVariableProperties(enabled);
+            m_intakeRunnerAndManifold.setVariableProperties(enabled);
+            m_exhaustRunnerAndPrimary.setVariableProperties(enabled);
+            if (enabled) {
+                m_intakeRunnerAndManifold.reset(m_intakeRunnerAndManifold.pressure(),m_intakeRunnerAndManifold.temperature(),{0,0.79,0.21});
+                m_exhaustRunnerAndPrimary.reset(m_exhaustRunnerAndPrimary.pressure(),m_exhaustRunnerAndPrimary.temperature(),{0,0.79,0.21});
+            }
+            m_intakePipe.configure(enabled,fuelMass,oxygenPerFuel);
+            m_exhaustPipe.configure(enabled,fuelMass,oxygenPerFuel);
+        }
 
         double lastEventAfr() const;
         double getWallTemperature() const { return m_thermal.wallTemperature(); }
-        double getCoolantEnergy() const { return m_thermal.coolantEnergy(); }
+        double getCoolantEnergy() const { return m_thermal.coolantEnergy()+m_lubrication.coolantEnergy(); }
+        double getOilTemperature() const { return m_lubrication.temperature(); }
+        double getFrictionEnergy() const { return m_lubrication.frictionEnergy(); }
 
         double getLastIterationExhaustFlow() const { return m_exhaustFlow; }
 
@@ -114,6 +135,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
 
         double *m_pressure;
         double *m_pistonSpeed;
+        double m_pistonSpeedSum = 0;
         static constexpr int StateSamples = 256;
 
         bool m_litLastFrame;
@@ -123,6 +145,10 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         Engine *m_engine;
         Fuel *m_fuel;
         CylinderThermalModel m_thermal;
+        bool m_dynamicCombustion = true;
+        LubricationModel m_lubrication;
+        GasPipe m_intakePipe, m_exhaustPipe;
+        void flowStep(double dt);
 };
 
 #endif /* ATG_ENGINE_SIM_COMBUSTION_CHAMBER_H */

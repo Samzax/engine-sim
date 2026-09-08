@@ -40,6 +40,16 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
     m_vehicle = vehicle;
     m_transmission = transmission;
 
+    const bool variableGas = engine->variableGasProperties();
+    for (int i = 0; i < engine->getIntakeCount(); ++i)
+        engine->getIntake(i)->configureGas(variableGas, engine->getFuel()->getMolecularMass(), engine->getFuel()->getMolecularAfr());
+    for (int i = 0; i < engine->getExhaustSystemCount(); ++i)
+        engine->getExhaustSystem(i)->configureGas(variableGas);
+    for (int i = 0; i < engine->getCylinderCount(); ++i) {
+        auto *chamber = engine->getChamber(i);
+        chamber->configureGas(variableGas,engine->getFuel()->getMolecularMass(),engine->getFuel()->getMolecularAfr());
+    }
+
     const int crankCount = m_engine->getCrankshaftCount();
     const int cylinderCount = m_engine->getCylinderCount();
     const int linkCount = cylinderCount * 2;
@@ -213,7 +223,8 @@ void PistonEngineSimulator::placeAndInitialize() {
         m_engine->getChamber(i)->m_system.initialize(
             units::pressure(1.0, units::atm),
             m_engine->getChamber(i)->getVolume(),
-            units::celcius(25.0)
+            units::celcius(25.0),
+            m_engine->variableGasProperties() ? GasSystem::Mix{0,0.79,0.21} : GasSystem::Mix{}
         );
 
         Piston *piston = m_engine->getChamber(i)->getPiston();

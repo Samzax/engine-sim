@@ -125,6 +125,8 @@ add_library(engine-sim STATIC
     include/fuel.h
     include/function.h
     include/gas_system.h
+    include/gas_thermo.h
+    include/gas_pipe.h
     include/gaussian_filter.h
     include/governor.h
     include/ignition_module.h
@@ -133,6 +135,7 @@ add_library(engine-sim STATIC
     include/jitter_filter.h
     include/leveling_filter.h
     include/low_pass_filter.h
+    include/lubrication_model.h
     include/part.h
     include/piston.h
     include/piston_engine_simulator.h

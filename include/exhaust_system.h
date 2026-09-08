@@ -29,6 +29,11 @@ class ExhaustSystem : public Part {
         virtual void destroy();
 
         void process(double dt);
+        void configureGas(bool enabled) {
+            m_system.setVariableProperties(enabled);
+            m_atmosphere.setVariableProperties(enabled);
+            if (enabled) m_system.reset(m_system.pressure(),m_system.temperature(),{0,0.79,0.21});
+        }
 
         inline int getIndex() const { return m_index; }
         inline double getLength() const { return m_length; }

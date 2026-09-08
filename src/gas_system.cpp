@@ -2,9 +2,96 @@
 
 #include "../include/units.h"
 #include "../include/utilities.h"
+#include "../include/gas_thermo.h"
 
 #include <cmath>
 #include <cassert>
+
+double GasSystem::molecularMass(const Mix &m) {
+    return (m.p_inert - m.p_co2 - m.p_h2o) * 0.028014 + m.p_o2 * 0.0319988
+        + m.p_co2 * 0.0440098 + m.p_h2o * 0.0180154 + m.p_fuel * m.fuelMolecularMass;
+}
+
+double GasSystem::mixtureEnergy(double t, const Mix &m) {
+    return (m.p_inert-m.p_co2-m.p_h2o)*gas_thermo::u(0,t) + m.p_o2*gas_thermo::u(1,t)
+        + m.p_co2*gas_thermo::u(2,t) + m.p_h2o*gas_thermo::u(3,t) + m.p_fuel*gas_thermo::u(4,t);
+}
+
+double GasSystem::mixtureCv(double t, const Mix &m) {
+    return (m.p_inert-m.p_co2-m.p_h2o)*gas_thermo::cv(0,t) + m.p_o2*gas_thermo::cv(1,t)
+        + m.p_co2*gas_thermo::cv(2,t) + m.p_h2o*gas_thermo::cv(3,t) + m.p_fuel*gas_thermo::cv(4,t);
+}
+
+void GasSystem::refreshProperties() const {
+    if (m_propertiesValid) return;
+    const Mix &m = m_state.mix;
+    const double weights[5] = {m.p_inert-m.p_co2-m.p_h2o, m.p_o2, m.p_co2, m.p_h2o, m.p_fuel};
+    for (int k=0; k<5; ++k) {
+        m_lowCp[k] = m_highCp[k] = 0;
+        for (int s=0; s<5; ++s) {
+            m_lowCp[k] += weights[s]*gas_thermo::coefficients[s][0][k];
+            m_highCp[k] += weights[s]*gas_thermo::coefficients[s][1][k];
+        }
+    }
+    m_cv200 = gas_thermo::cvPolynomial(m_lowCp, 200);
+    m_cv6000 = gas_thermo::cvPolynomial(m_highCp, 6000);
+    m_u200 = 200*m_cv200;
+    m_u1000 = m_u200 + gas_thermo::integral(m_lowCp,1000)-gas_thermo::integral(m_lowCp,200);
+    m_u6000 = m_u1000 + gas_thermo::integral(m_highCp,6000)-gas_thermo::integral(m_highCp,1000);
+    m_molarMass = molecularMass(m);
+    m_propertiesValid = true;
+}
+
+double GasSystem::molarEnergy(double t) const {
+    refreshProperties();
+    if (t <= 200) return m_cv200*t;
+    if (t <= 1000) return m_u200+gas_thermo::integral(m_lowCp,t)-gas_thermo::integral(m_lowCp,200);
+    if (t <= 6000) return m_u1000+gas_thermo::integral(m_highCp,t)-gas_thermo::integral(m_highCp,1000);
+    return m_u6000 + m_cv6000*(t-6000);
+}
+
+double GasSystem::molarCv(double t) const {
+    refreshProperties();
+    if (t <= 200) return m_cv200;
+    if (t >= 6000) return m_cv6000;
+    return gas_thermo::cvPolynomial(t<=1000 ? m_lowCp : m_highCp, t);
+}
+
+double GasSystem::energyAtTemperature(double t) const {
+    return n() * (m_variableProperties ? molarEnergy(t)
+        : kineticEnergyPerMol(t, m_degreesOfFreedom));
+}
+
+double GasSystem::heatCapacity(double t) const {
+    return n() * (m_variableProperties ? molarCv(t)
+        : 0.5 * m_degreesOfFreedom * constants::R);
+}
+
+void GasSystem::setVariableProperties(bool enabled) {
+    const double t = temperature();
+    m_variableProperties = enabled;
+    m_propertiesValid = false;
+    m_state.E_k = energyAtTemperature(t);
+    m_cachedEnergy = -1;
+}
+
+double GasSystem::temperature() const {
+    if (n() <= 0) return 0;
+    if (!m_variableProperties) return kineticEnergy() / heatCapacity(300);
+    if (m_cachedEnergy == kineticEnergy() && m_cachedN == n()) return m_cachedTemperature;
+    const double target = (std::max)(0.0, kineticEnergy() / n());
+    double lower = 0, upper = (std::max)(6000.0, target / constants::R);
+    double t = std::clamp(m_cachedTemperature, lower, upper);
+    for (int i = 0; i < 32; ++i) {
+        const double residual = molarEnergy(t) - target;
+        if (std::abs(residual) <= 1e-10 * (std::max)(1.0, target)) break;
+        if (residual > 0) upper = t; else lower = t;
+        const double next = t - residual / molarCv(t);
+        t = next > lower && next < upper ? next : 0.5 * (lower + upper);
+    }
+    m_cachedEnergy = kineticEnergy(); m_cachedN = n(); m_cachedTemperature = t;
+    return t;
+}
 
 void GasSystem::setGeometry(double width, double height, double dx, double dy) {
     m_width = width;
@@ -19,6 +106,9 @@ void GasSystem::initialize(double P, double V, double T, const Mix &mix, int deg
     m_state.V = V;
     m_state.E_k = T * (0.5 * degreesOfFreedom * m_state.n_mol * constants::R);
     m_state.mix = mix;
+    m_propertiesValid = false;
+    if (m_variableProperties) m_state.E_k = energyAtTemperature(T);
+    m_cachedEnergy = -1;
     m_state.momentum[0] = m_state.momentum[1] = 0;
 
     const double hcr = heatCapacityRatio();
@@ -30,6 +120,9 @@ void GasSystem::reset(double P, double T, const Mix &mix) {
     m_state.n_mol = P * volume() / (constants::R * T);
     m_state.E_k = T * (0.5 * m_degreesOfFreedom * m_state.n_mol * constants::R);
     m_state.mix = mix;
+    m_propertiesValid = false;
+    if (m_variableProperties) m_state.E_k = energyAtTemperature(T);
+    m_cachedEnergy = -1;
     m_state.momentum[0] = m_state.momentum[1] = 0;
 }
 
@@ -54,10 +147,18 @@ void GasSystem::changeVolume(double dV) {
 }
 
 void GasSystem::changePressure(double dP) {
+    if (m_variableProperties) {
+        if (n() > 0) m_state.E_k = energyAtTemperature((std::max)(0.0, temperature() + dP * volume() / (n() * constants::R)));
+        return;
+    }
     m_state.E_k += dP * volume() * m_degreesOfFreedom * 0.5;
 }
 
 void GasSystem::changeTemperature(double dT) {
+    if (m_variableProperties) {
+        m_state.E_k = energyAtTemperature((std::max)(0.0, temperature() + dT));
+        return;
+    }
     m_state.E_k += dT * 0.5 * m_degreesOfFreedom * n() * constants::R;
 }
 
@@ -67,19 +168,60 @@ void GasSystem::changeEnergy(double dE) {
 
 void GasSystem::changeMix(const Mix &mix) {
     m_state.mix = mix;
+    m_propertiesValid = false;
+    m_cachedEnergy = -1;
 }
 
 void GasSystem::injectFuel(double n) {
+    if (m_variableProperties) {
+        Mix fuel = m_state.mix;
+        fuel.p_fuel=1; fuel.p_inert=fuel.p_o2=fuel.p_co2=fuel.p_h2o=0;
+        gainN(n, mixtureEnergy(temperature(), fuel), fuel);
+        return;
+    }
     const double n_fuel = this->n_fuel() + n;
     const double p_fuel = n_fuel / this->n();
     m_state.mix.p_fuel = p_fuel;
 }
 
 void GasSystem::changeTemperature(double dT, double n) {
+    if (m_variableProperties) {
+        const double t = temperature();
+        m_state.E_k += n * (mixtureEnergy((std::max)(0.0, t+dT), m_state.mix) - mixtureEnergy(t, m_state.mix));
+        return;
+    }
     m_state.E_k += dT * 0.5 * m_degreesOfFreedom * n * constants::R;
 }
 
 double GasSystem::react(double n, const Mix &mix) {
+    if (m_variableProperties) {
+        const double s = mix.oxygenPerFuel;
+        // Equivalent hydrocarbon C_x H_y from molecular mass and oxygen demand.
+        const double carbon = (mix.fuelMolecularMass - 4 * 0.001008 * s) / (0.012011 - 4 * 0.001008);
+        const double water = 2 * (s - carbon);
+        if (!(s > 0) || carbon < 0 || water < 0) return 0;
+        const double burned = (std::max)(0.0, (std::min)({n_fuel(), n * mix.p_fuel,
+            n_o2() / s, n * mix.p_o2 / s}));
+        if (burned == 0) return 0;
+        const double oldN = this->n();
+        const double oldReference = energyAtTemperature(298.15);
+        const Mix old = m_state.mix;
+        m_state.mix.residualFraction = old.residualFraction + (1-old.residualFraction)*burned/(old.p_fuel*oldN);
+        const double newN = oldN + burned * (carbon + water - 1 - s);
+        m_state.mix.p_fuel = (old.p_fuel * oldN - burned) / newN;
+        m_state.mix.p_o2 = (old.p_o2 * oldN - s * burned) / newN;
+        m_state.mix.p_co2 = (old.p_co2 * oldN + carbon * burned) / newN;
+        m_state.mix.p_h2o = (old.p_h2o * oldN + water * burned) / newN;
+        m_state.mix.p_inert = (old.p_inert * oldN + (carbon + water) * burned) / newN;
+        m_state.n_mol = newN;
+        m_propertiesValid = false;
+        m_cachedEnergy = -1;
+        // Fuel energy density supplies the reaction enthalpy at 298.15 K.
+        // Convert it to internal energy and maintain our sensible-energy datum.
+        m_state.E_k += energyAtTemperature(298.15) - oldReference
+            + (newN - oldN) * constants::R * 298.15;
+        return burned;
+    }
     const double l_n_fuel = mix.p_fuel * n;
     const double l_n_o2 = mix.p_o2 * n;
 
@@ -247,13 +389,30 @@ double GasSystem::gainN(double dn, double E_k_per_mol, const Mix &mix) {
     m_state.n_mol = next_n;
 
     if (next_n != 0) {
+        const double incomingMass = dn*molecularMass(mix);
+        const double existingMass = current_n*molecularMass(m_state.mix);
+        if (incomingMass+existingMass > 0)
+            m_state.mix.residualFraction = (existingMass*m_state.mix.residualFraction
+                + incomingMass*mix.residualFraction)/(incomingMass+existingMass);
+        const double fuelN = m_state.mix.p_fuel * current_n + dn * mix.p_fuel;
+        if (fuelN > 0) {
+            m_state.mix.fuelMolecularMass = (m_state.mix.fuelMolecularMass * m_state.mix.p_fuel * current_n
+                + dn * mix.p_fuel * mix.fuelMolecularMass) / fuelN;
+            m_state.mix.oxygenPerFuel = (m_state.mix.oxygenPerFuel * m_state.mix.p_fuel * current_n
+                + dn * mix.p_fuel * mix.oxygenPerFuel) / fuelN;
+        }
+        m_state.mix.p_co2 = (m_state.mix.p_co2 * current_n + dn * mix.p_co2) / next_n;
+        m_state.mix.p_h2o = (m_state.mix.p_h2o * current_n + dn * mix.p_h2o) / next_n;
         m_state.mix.p_fuel = (m_state.mix.p_fuel * current_n + dn * mix.p_fuel) / next_n;
         m_state.mix.p_inert = (m_state.mix.p_inert * current_n + dn * mix.p_inert) / next_n;
         m_state.mix.p_o2 = (m_state.mix.p_o2 * current_n + dn * mix.p_o2) / next_n;
     }
     else {
         m_state.mix.p_fuel = m_state.mix.p_inert = m_state.mix.p_o2 = 0;
+        m_state.mix.p_co2 = m_state.mix.p_h2o = 0;
     }
+    m_cachedEnergy = -1;
+    m_propertiesValid = false;
 
     return -dn;
 }
@@ -386,17 +545,19 @@ double GasSystem::flow(const FlowParameters &params) {
         direction = -1.0;
     }
 
+    if (params.dt <= 0 || source->n() <= 0) return 0;
+    const double gamma = source->heatCapacityRatio();
     double flow = params.dt * flowRate(
         params.k_flow,
         sourcePressure,
         sinkPressure,
         source->temperature(),
         sink->temperature(),
-        source->heatCapacityRatio(),
-        source->m_chokedFlowLimit,
-        source->m_chokedFlowFactorCached);
-
-    const double maxFlow = source->pressureEquilibriumMaxFlow(sink);
+        gamma,
+        source->m_variableProperties ? std::pow(2/(gamma+1), gamma/(gamma-1)) : source->m_chokedFlowLimit,
+        source->m_variableProperties ? std::sqrt(gamma)*std::pow(2/(gamma+1), (gamma+1)/(2*(gamma-1))) : source->m_chokedFlowFactorCached);
+    if (source->m_variableProperties)
+        flow *= std::sqrt(units::AirMolecularMass / molecularMass(source->mix()));
     flow = clamp(flow, 0.0, 0.9 * source->n());
 
     const double fraction = flow / source->n();
@@ -520,6 +681,45 @@ double GasSystem::flow(const FlowParameters &params) {
 }
 
 double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix) {
+    if (m_variableProperties) {
+        if (dt <= 0) return 0;
+        const bool outgoing = pressure() > P_env;
+        const double gamma = outgoing ? heatCapacityRatio() : 1 + constants::R / mixtureCv(T_env, mix);
+        double amount = dt * flowRate(k_flow, pressure(), P_env, temperature(), T_env, gamma,
+            std::pow(2/(gamma+1), gamma/(gamma-1)),
+            std::sqrt(gamma)*std::pow(2/(gamma+1), (gamma+1)/(2*(gamma-1))));
+        amount *= std::sqrt(units::AirMolecularMass / molecularMass(outgoing ? m_state.mix : mix));
+        if (outgoing) amount = (std::min)(amount, 0.9*n());
+        const double donorEnergy = outgoing ? (n() > 0 ? kineticEnergyPerMol() : 0) : mixtureEnergy(T_env, mix);
+        const auto transfer = [&](GasSystem &g, double a) {
+            if (a < 0) {
+                const double before = g.bulkKineticEnergy();
+                g.gainN(-a, donorEnergy, mix);
+                // Incoming stationary gas dilutes momentum; lost bulk KE heats gas.
+                g.changeEnergy(before - g.bulkKineticEnergy());
+            } else if (a > 0 && g.n() > 0) {
+                const double fraction = a/g.n();
+                g.loseN(a, donorEnergy);
+                g.m_state.momentum[0] *= 1-fraction;
+                g.m_state.momentum[1] *= 1-fraction;
+            }
+        };
+        GasSystem trial = *this;
+        transfer(trial, amount);
+        if ((trial.pressure() - P_env) * (pressure() - P_env) < 0) {
+            double low = 0, high = 1;
+            for (int i = 0; i < 24; ++i) {
+                const double factor = (low+high)/2;
+                trial = *this;
+                transfer(trial, amount*factor);
+                if ((trial.pressure()-P_env)*(pressure()-P_env) < 0) high = factor;
+                else low = factor;
+            }
+            amount *= low;
+        }
+        transfer(*this, amount);
+        return amount;
+    }
     const double maxFlow = pressureEquilibriumMaxFlow(P_env, T_env);
     double flow = dt * flowRate(
         k_flow,
