@@ -1,6 +1,24 @@
 #include "../include/simulator.h"
 #include <stdexcept>
 
+namespace {
+// The pinned generic system does not release its intermediate matrices.
+class GenericSystem : public atg_scs::GenericRigidBodySystem {
+public:
+    ~GenericSystem() override {
+        m_iv.J_sparse.destroy();
+        m_iv.J_dot_sparse.destroy();
+        m_iv.sreg0.destroy();
+        for (auto *matrix : {&m_iv.J_T, &m_iv.M, &m_iv.M_inv, &m_iv.C,
+                &m_iv.ks, &m_iv.kd, &m_iv.q_dot, &m_iv.reg0, &m_iv.reg1,
+                &m_iv.reg2, &m_iv.right, &m_iv.F_ext, &m_iv.F_C, &m_iv.R,
+                &m_iv.lambda}) {
+            matrix->destroy();
+        }
+    }
+};
+}
+
 Simulator::Simulator() {
     m_engine = nullptr;
     m_vehicle = nullptr;
@@ -33,7 +51,7 @@ void Simulator::initialize(const Parameters &params) {
         m_system = system.release();
     }
     else {
-        auto system = std::make_unique<atg_scs::GenericRigidBodySystem>();
+        auto system = std::make_unique<GenericSystem>();
         m_sleSolver = std::make_unique<atg_scs::GaussianEliminationSleSolver>();
         m_odeSolver = std::make_unique<atg_scs::NsvOdeSolver>();
         system->initialize(m_sleSolver.get(), m_odeSolver.get());

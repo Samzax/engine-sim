@@ -95,6 +95,15 @@ TEST(SimulatorRegression, InvalidEngineRejectedBeforeSimulatorInitialization) {
     engine.destroy();
 }
 
+TEST(SimulatorRegression, GenericSolverRepeatedCleanup) {
+    PistonEngineSimulator simulator;
+    Simulator::Parameters params;
+    params.systemType = Simulator::SystemType::Generic;
+    simulator.initialize(params);
+    simulator.destroy();
+    simulator.destroy();
+}
+
 TEST(SimulatorRegression, ExhaustOxygenDoesNotRequireUnburnedFuel) {
     Engine engine;
     Engine::Parameters params{};
