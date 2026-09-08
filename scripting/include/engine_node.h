@@ -29,11 +29,15 @@ namespace es_script {
             if (m_fuel == nullptr || m_throttle == nullptr)
                 return "Engine requires fuel and throttle definitions";
             const std::set<CrankshaftNode *> crankshafts(m_crankshafts.begin(), m_crankshafts.end());
-            std::set<ConnectingRodNode *> rods;
+            std::map<ConnectingRodNode *, const RodJournalNode *> rods;
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 if (bank->getCylinderCount() == 0) return "Cylinder bank requires at least one cylinder";
                 if (bank->getCylinderHead() == nullptr) return "Cylinder bank requires a cylinder head";
-                for (int i = 0; i < bank->getCylinderCount(); ++i) rods.insert(bank->getCylinder(i).rod);
+                for (int i = 0; i < bank->getCylinderCount(); ++i) {
+                    const auto &cylinder = bank->getCylinder(i);
+                    if (!rods.emplace(cylinder.rod, cylinder.rodJournal).second)
+                        return "Each cylinder requires a separate connecting rod instance";
+                }
             }
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 for (int i = 0; i < bank->getCylinderCount(); ++i) {
@@ -45,6 +49,17 @@ namespace es_script {
                         || (hasMasterRod && rods.count(journal->getRod()) == 0)) {
                         return "Cylinder rod journal must belong to a crankshaft or master rod in this engine";
                     }
+                }
+            }
+            // Every chain of master rods must terminate at a crankshaft. A loop
+            // otherwise reaches the recursive runtime rod traversal intact.
+            for (const auto &entry : rods) {
+                std::set<ConnectingRodNode *> visited;
+                ConnectingRodNode *rod = entry.first;
+                while (rod != nullptr) {
+                    if (!visited.insert(rod).second)
+                        return "Connecting rod assembly contains a master rod cycle";
+                    rod = rods.at(rod)->getRod();
                 }
             }
             return {};
