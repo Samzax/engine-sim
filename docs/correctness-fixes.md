@@ -461,3 +461,10 @@ update. The new condition freezes stored peaks during that period; live filters
 continue updating. The calculation was checked directly, and the Release build
 and hidden GUI reload/shutdown check passed. The GUI check does not itself
 exercise a loaded dyno sweep.
+
+A subsequent isolated GUI trace enabled RPM hold at 1000 RPM for 20 frames,
+then disabled the dyno for 15 frames. It measured positive torque while enabled;
+peak torque, peak power, and their associated RPM remained exactly unchanged
+through every disabled frame. The starter remained engaged, so these readings
+are diagnostic loads rather than engine performance measurements. The temporary
+trace and control overrides were restored, and the normal executable rebuilt.
