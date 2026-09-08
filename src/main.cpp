@@ -33,7 +33,7 @@ int WINAPI WinMain(
     application.destroy();
     if (diagnostic) {
         std::ofstream report("gui-check.txt");
-        report << "GUI initialization, successful reload, failed reload preserving the engine, "
+        report << "GUI initialization, minimize/restore, successful reload, failed reload preserving the engine, "
             "120 frame-loop iterations and shutdown completed.\n";
         report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
         if (!report) return 3;

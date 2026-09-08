@@ -20,6 +20,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstring>
+#include "delta-studio/include/yds_windows_window.h"
 
 #include "../scripting/include/compiler.h"
 
@@ -522,6 +523,18 @@ void EngineSimApplication::run(int maxFrames) {
         if (!m_engine.IsOpen()) break;
         if (m_engine.ProcessKeyDown(ysKey::Code::Escape)) {
             break;
+        }
+
+        if (m_diagnosticMode && (frames == 20 || frames == 25)) {
+            // This mode is restricted to the launcher's isolated desktop.
+            const HWND window = static_cast<ysWindowsWindow *>(m_engine.GetGameWindow())->GetWindowHandle();
+            const bool minimize = frames == 20;
+            ShowWindow(window, minimize ? SW_MINIMIZE : SW_RESTORE);
+            if ((IsIconic(window) != FALSE) != minimize
+                || (!minimize && (m_engine.GetGameWindow()->GetGameWidth() <= 0
+                    || m_engine.GetGameWindow()->GetGameHeight() <= 0))) {
+                startupFailure("GUI diagnostic could not minimize or restore its window.");
+            }
         }
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Return)

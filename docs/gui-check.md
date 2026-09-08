@@ -26,6 +26,10 @@ application's GPU texture, not from a desktop screenshot.
 The diagnostic enables ignition, holds the starter and sets the speed-control input to 10%
 through the simulation API. The report includes final RPM; this exercises the
 live gauges and traces but does not claim a stable idle with the starter released.
+At frame 20 it minimizes its own window, then restores it at frame 25 and checks
+that the client area is positive again. This happens entirely on the isolated
+desktop. The Release run passed this cycle on 2026-09-08, and the final exported
+frame was inspected after restoration.
 At frame 40 it reloads the configured engine through the normal reload and audio
 stop/restart path. At frame 80 it deliberately attempts to compile the assets
 directory as a script and verifies that the current simulator survives. This
