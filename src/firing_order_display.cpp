@@ -17,7 +17,7 @@ FiringOrderDisplay::FiringOrderDisplay() {
 }
 
 FiringOrderDisplay::~FiringOrderDisplay() {
-    /* void */
+    delete[] m_cylinderLit;
 }
 
 void FiringOrderDisplay::initialize(EngineSimApplication *app) {
