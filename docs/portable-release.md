@@ -9,6 +9,22 @@ in the simulator to reload it. Failed reloads leave the current engine running.
 If the initial script fails, the status instead says no engine is loaded.
 Details are written to `error_log.log` in the working directory.
 
+For example, to use the bundled Hayabusa, make `assets/main.mr` contain:
+
+```mr
+import "engine_sim.mr"
+import "themes/default.mr"
+import "engines/atg-video-1/04_hayabusa.mr"
+
+use_default_theme()
+main()
+```
+
+Replace the previous engine import instead of adding a second one: the bundled
+engine scripts each define `main()`. Save the file, return to the simulator, and
+press Enter. Other bundled engines are under `assets/engines`; their import paths
+are relative to `assets/main.mr`.
+
 Press A to enable ignition, then hold S to crank the engine and release S after
 it starts. Hold Q, W, E, or R for 1%, 10%, 20%, or 100% speed-control input.
 Different engines may need different cranking times and input settings. For
