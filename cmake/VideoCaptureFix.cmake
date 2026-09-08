@@ -57,6 +57,18 @@ if (_match EQUAL -1)
     message(FATAL_ERROR "Video frame copy changed; review cmake/VideoCaptureFix.cmake")
 endif()
 string(REPLACE "${_packed_copy}" "${_strided_copy}" _encoder_code "${_encoder_code}")
+set(_unchecked_frame "            generateFrame(frame, videoStream.frame, m_videoSettings, &videoStream);")
+set(_writable_frame [=[            // The codec may still hold a reference to the previous frame's pixels.
+            if (av_frame_make_writable(videoStream.frame) < 0) {
+                err = Error::CouldNotAllocateFrame;
+                goto end;
+            }
+            generateFrame(frame, videoStream.frame, m_videoSettings, &videoStream);]=])
+string(FIND "${_encoder_code}" "${_unchecked_frame}" _match)
+if (_match EQUAL -1)
+    message(FATAL_ERROR "Video frame conversion changed; review cmake/VideoCaptureFix.cmake")
+endif()
+string(REPLACE "${_unchecked_frame}" "${_writable_frame}" _encoder_code "${_encoder_code}")
 set(_old_trailer "    av_write_trailer(oc);")
 set(_flushed_trailer [=[    // Drain delayed packets before finalizing the container.
     err = writeFrame(oc, videoStream.codecContext, videoStream.av_stream,
