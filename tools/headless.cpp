@@ -77,7 +77,8 @@ int main(int argc, char **argv) {
     }
     try {
         const double duration = parseNumber(argv[3], "Duration");
-        const double starterDuration = argc > 4 ? parseNumber(argv[4], "Starter duration") : 1.0;
+        const double starterDuration = argc > 4 ? parseNumber(argv[4], "Starter duration")
+            : (duration < 1.0 ? duration : 1.0);
         const double throttle = argc > 5 ? parseNumber(argv[5], "Throttle") : 0.1;
         if (!std::isfinite(duration) || duration <= 0 || duration > 3600) {
             throw std::invalid_argument("Duration must be between 0 and 3600 seconds");

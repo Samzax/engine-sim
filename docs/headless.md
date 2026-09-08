@@ -10,7 +10,7 @@ the number of samples saturated at the PCM16 limits.
 ```
 
 Arguments are script path, script-library directory, run duration in seconds,
-optional starter duration (default 1 second), and optional throttle (default
+optional starter duration (default 1 second, or the full run if shorter), and optional throttle (default
 0.1, range 0..1). Scripts without a vehicle or transmission use the application's
 defaults. Relative paths are resolved from the caller's directory; absolute
 paths allow running from elsewhere.
