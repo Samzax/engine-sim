@@ -9,7 +9,7 @@ Changes:
 - Audio input/output queues and block state share one mutex. DSP settings are copied once per block; convolution runs outside the queue lock, then completed samples are published. Shutdown wakes blocked workers. The audio consumer must keep draining output while a producer waits for processing.
 - Ring buffers distinguish full from empty and drop the oldest sample on overflow. Unavailable output is zero-filled. The application reuses audio scratch storage.
 - Missing, silent or unsupported impulse responses use dry audio. The bounded WAV reader accepts mono PCM16 at 44100 Hz and rejects malformed/truncated files before reading sample data.
-- Exhaust delay uses the configured physics frequency and resamples queued history when that frequency changes. Zero-step frames report zero intake flow.
+- Exhaust delay uses the configured physics frequency and resamples queued history when that frequency changes. Frames without a physics step retain the last measured intake flow, avoiding artificial CFM and volumetric-efficiency dips during slow motion.
 - Replaced obsolete synthesizer fixtures with focused regression checks; added Windows Debug/Release and portable sanitizer CI jobs.
 - Corrected existing gas-equilibrium tests to transfer the signed flow using the donor's energy (and use the newly calculated outflow). Gaussian tests now compare smoothing against an analytic kernel instead of assuming exact interpolation; physics behavior was not changed to satisfy these tests.
 

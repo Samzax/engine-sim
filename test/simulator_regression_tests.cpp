@@ -229,6 +229,12 @@ TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
         while (simulator->simulateStep()) {}
         simulator->endFrame();
         simulator->synthesizer().renderAudio();
+        const double lastFlow = engine.output.engine->getIntakeFlowRate();
+        EXPECT_NE(lastFlow, 0.0);
+        simulator->startFrame(0);
+        EXPECT_EQ(simulator->getFrameIterationCount(), 0);
+        simulator->endFrame();
+        EXPECT_DOUBLE_EQ(engine.output.engine->getIntakeFlowRate(), lastFlow);
         simulator->setSimulationFrequency(20000);
         simulator->destroy();
         simulator->destroy();

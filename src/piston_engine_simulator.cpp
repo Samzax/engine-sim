@@ -331,10 +331,11 @@ void PistonEngineSimulator::endFrame() {
     }
 
     const double frameTimestep = simulationSteps() * getTimestep();
-    const int cylinderCount = m_engine->getCylinderCount();
+    // No simulated time elapsed, so retain the last measured flow for gauges.
+    // startFrame resets the accumulator when the next physics step is scheduled.
+    if (frameTimestep <= 0) return;
     for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-        m_engine->getIntake(i)->m_flowRate = frameTimestep > 0
-            ? m_engine->getIntake(i)->m_flowRate / frameTimestep : 0.0;
+        m_engine->getIntake(i)->m_flowRate /= frameTimestep;
     }
 }
 
