@@ -1349,11 +1349,18 @@ void EngineSimApplication::stopRecording() {
 
 void EngineSimApplication::recordFrame() {
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
-    atg_dtv::Frame *frame = m_encoder.newFrame(false);
-    if (frame != nullptr && m_encoder.getError() == atg_dtv::Encoder::Error::None) {
-        m_engine.GetDevice()->ReadRenderTarget(m_engine.GetScreenRenderTarget(), frame->m_rgb);
+    if (m_encoder.getError() != atg_dtv::Encoder::Error::None) {
+        stopRecording();
+        m_infoCluster->setLogMessage("Video encoder failed; recording stopped");
+        return;
     }
-
+    atg_dtv::Frame *frame = m_encoder.newFrame(false);
+    if (frame == nullptr) return;
+    if (m_engine.GetDevice()->ReadRenderTarget(m_engine.GetScreenRenderTarget(), frame->m_rgb) != ysError::None) {
+        stopRecording();
+        m_infoCluster->setLogMessage("Frame capture failed; recording stopped");
+        return;
+    }
     m_encoder.submitFrame();
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
 }

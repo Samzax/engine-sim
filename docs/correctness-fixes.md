@@ -105,3 +105,10 @@ Radial 9, the old result was 16.488413 L; sampling the simulator's actual piston
 placement over a revolution gives 15.939338 L. The corrected calculation agrees
 with that independent placement path. This corrects the displayed displacement
 and statistics derived from it; it does not change the physics integrator.
+
+Optional video capture now submits a frame only after queue allocation and GPU
+readback succeed. A full queue previously returned no frame, but the app still
+submitted it, increasing the queue length beyond its capacity. Encoder or
+readback errors stop recording and report a status message. The video-enabled
+application translation unit passes MSVC syntax checking with the actual
+dependency headers; end-to-end FFmpeg encoding has not been verified.
