@@ -288,3 +288,16 @@ Actual firing events remain sampled by the display, so this comparison verifies
 the smoothing calculation rather than identical rendered brightness for every
 engine event sequence. The Release build and isolated GUI initialization,
 reload, minimize/restore, frame-loop, and shutdown check passed.
+
+### Nested connecting rods
+
+Crankshaft references are now resolved after all master-rod links exist, and
+initial placement waits until each rod's parent is placed. The previous two
+placement passes could leave a deeply nested child attached to its parent's
+old position. A three-rod chain listed child-first reproduced a 68 mm initial
+joint mismatch and a missing crankshaft reference. After the change, all joints
+in that fixture aligned within 1e-9 m and every rod had a crankshaft reference.
+The temporary measurement ran before physics and was removed afterward.
+All 13 simulator regressions and short load/simulation runs for 20 bundled
+engines passed. These checks establish assembly placement, not the physical
+realism of arbitrary nested-rod designs.

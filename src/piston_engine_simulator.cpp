@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <chrono>
 #include <set>
+#include <unordered_set>
+#include <stdexcept>
 
 PistonEngineSimulator::PistonEngineSimulator() {
     m_engine = nullptr;
@@ -190,16 +192,19 @@ double PistonEngineSimulator::getAverageOutputSignal() const {
 
 void PistonEngineSimulator::placeAndInitialize() {
     const int cylinderCount = m_engine->getCylinderCount();
-    for (int i = 0; i < cylinderCount; ++i) {
-        ConnectingRod *rod = m_engine->getConnectingRod(i);
-
-        if (rod->getRodJournalCount() != 0) {
-            placeCylinder(i);
+    std::unordered_set<ConnectingRod *> placed;
+    while (placed.size() < static_cast<size_t>(cylinderCount)) {
+        const size_t previousCount = placed.size();
+        for (int i = 0; i < cylinderCount; ++i) {
+            ConnectingRod *rod = m_engine->getConnectingRod(i);
+            if (placed.count(rod) != 0) continue;
+            if (rod->getMasterRod() == nullptr || placed.count(rod->getMasterRod()) != 0) {
+                placeCylinder(i);
+                placed.insert(rod);
+            }
         }
-    }
-
-    for (int i = 0; i < cylinderCount; ++i) {
-        placeCylinder(i);
+        if (placed.size() == previousCount)
+            throw std::invalid_argument("Connecting rod masters must form an acyclic assembly within the engine");
     }
 
     for (int i = 0; i < cylinderCount; ++i) {

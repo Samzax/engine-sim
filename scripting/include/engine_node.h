@@ -147,6 +147,15 @@ namespace es_script {
                 m_cylinderBanks[i]->connectRodAssemblies(&context);
             }
 
+            // All master links must exist before resolving nested rods. The
+            // assembly validation above has already rejected master cycles.
+            for (int i = 0; i < engine->getCylinderCount(); ++i) {
+                ConnectingRod *rod = engine->getConnectingRod(i);
+                ConnectingRod *root = rod;
+                while (root->getMasterRod() != nullptr) root = root->getMasterRod();
+                rod->setCrankshaft(root->getCrankshaft());
+            }
+
             m_ignitionModule->generate(engine, &context);
             
             Function *meanPistonSpeedToTurbulence = new Function;

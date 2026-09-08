@@ -41,7 +41,6 @@ namespace es_script {
                 RodJournalNode *journal = m_cylinders[i].rodJournal;
                 if (journal->getRod() != nullptr) {
                     rod->setMaster(context->getConnectingRod(journal->getRod()));
-                    rod->setCrankshaft(rod->getMasterRod()->getCrankshaft());
                 }
             }
         }
