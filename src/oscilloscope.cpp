@@ -150,8 +150,10 @@ Point Oscilloscope::dataPointToRenderPosition(
     const float width = bounds.width();
     const float height = bounds.height();
 
-    const float s_x = (float)((p.x - m_xMin) / (m_xMax - m_xMin));
-    const float s_y = (float)((p.y - m_yMin) / (m_yMax - m_yMin));
+    const float s_x = (m_xMax != m_xMin)
+        ? static_cast<float>((p.x - m_xMin) / (m_xMax - m_xMin)) : 0.5f;
+    const float s_y = (m_yMax != m_yMin)
+        ? static_cast<float>((p.y - m_yMin) / (m_yMax - m_yMin)) : 0.5f;
 
     const Point local = { s_x * width, s_y * height };
 
