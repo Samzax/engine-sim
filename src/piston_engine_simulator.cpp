@@ -151,7 +151,7 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
         m_linkConstraints[i * 2 + 1]
             .setLocalPosition2(journal_x, journal_y);
         m_linkConstraints[i * 2 + 1].m_ks = ks;
-        m_linkConstraints[i * 2 + 0].m_kd = kd;
+        m_linkConstraints[i * 2 + 1].m_kd = kd;
 
         piston->m_body.m = piston->getMass();
         piston->m_body.I = 1.0;
