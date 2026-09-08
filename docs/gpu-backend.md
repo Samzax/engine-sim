@@ -156,6 +156,36 @@ it must not be interpreted as a valid timing result.
 
 ## Build and checks
 
+### Shared gas model for the coupled backend
+
+The CUDA translation unit now compiles the existing `GasSystem` numerical source
+for device execution, including mixture thermodynamics and finite-volume and
+fixed-environment transfers. CPU compilation retains the same source. Device
+coefficients use constant memory; double precision and `--fmad=false` remain in
+effect. The added relaxed-constexpr compiler option permits constexpr helpers
+across execution spaces; it does not enable fast math.
+
+`gpu_gas::advance` is a standalone validation batch. It is not called by the live
+engine yet and provides no live simulation speedup. It copies trivially copyable
+gas values, runs independent transfers, and publishes results only after CUDA
+completion. Moving the coupled fluid loop still requires chamber heat, combustion,
+reservoir ordering, adaptive timesteps, and counters to execute consistently on
+the device.
+
+`GasSystemTests.CudaGasTransfersMatchCpuAndConserveClosedSystem` compares 660
+cases over five successive transfers, including vacuum cells, different mixtures,
+150–7000 K, closed ports, zero timesteps, and both gas-property modes for finite
+volumes. Fixed-environment cases cover variable properties. It checks individual
+states against CPU results and closed-system mass and energy conservation. This
+test passed with NVIDIA Compute Sanitizer memcheck reporting zero errors. The
+existing CUDA pipe comparison and separated-reservoir evolution regression also
+passed. A fresh CPU-only build passed 56 selected checks, with the two CUDA-only
+checks skipped.
+
+The RTX 3090 runtime reports cooperative-launch support and 82 multiprocessors.
+This makes a synchronized multi-block coupled kernel worth investigating; actual
+kernel occupancy, correctness, and real-time performance remain unproven.
+
 ### Phase profiling and closed ports
 
 Configure a diagnostic build with `-DENGINE_SIM_PROFILE=ON` to print inclusive

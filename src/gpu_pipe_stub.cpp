@@ -1,4 +1,5 @@
 #include "../include/gpu_pipe.h"
+#include "../include/gpu_gas.h"
 #include <cstdlib>
 #include <stdexcept>
 namespace gpu_pipe {
@@ -10,4 +11,7 @@ bool enabled() {
 }
 const char *deviceName() { return "CPU"; }
 void advance(Pipe *, int, double) { throw std::runtime_error("CUDA backend is not built"); }
+}
+namespace gpu_gas {
+void advance(Transfer *,int) { throw std::runtime_error("CUDA backend is not built"); }
 }

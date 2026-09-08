@@ -169,6 +169,7 @@ if (ENGINE_SIM_CUDA)
     set_target_properties(engine-sim-cuda PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON
         CUDA_RUNTIME_LIBRARY Shared)
     target_compile_options(engine-sim-cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+    target_compile_options(engine-sim-cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
     if (MSVC)
         target_compile_options(engine-sim-cuda PRIVATE
             $<$<CONFIG:Debug>:-Xcompiler=/MDd>

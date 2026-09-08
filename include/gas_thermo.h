@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_GAS_THERMO_H
 
 #include "constants.h"
+#include "gas_execution.h"
 #include <algorithm>
 
 namespace gas_thermo {
@@ -26,20 +27,32 @@ inline constexpr double coefficients[5][2][5] = {
 // inverting sensible energy back to temperature.
 inline constexpr double minimumCvRatio[5]={2.45,2.45,2.8,2.99,14.0};
 
-inline double cvPolynomial(const double *a, double t) {
+#ifdef __CUDACC__
+// The shared gas implementation and its table live in one CUDA translation unit.
+static __device__ __constant__ double deviceCoefficients[5][2][5];
+#endif
+ES_GAS_FUNCTION inline const double *coefficientsAt(int species,int range) {
+#ifdef __CUDA_ARCH__
+    return deviceCoefficients[species][range];
+#else
+    return coefficients[species][range];
+#endif
+}
+
+ES_GAS_FUNCTION inline double cvPolynomial(const double *a, double t) {
     return constants::R * ((((a[4]*t+a[3])*t+a[2])*t+a[1])*t+a[0]-1);
 }
-inline double integral(const double *a, double t) {
+ES_GAS_FUNCTION inline double integral(const double *a, double t) {
     return constants::R * t * ((((a[4]*t/5+a[3]/4)*t+a[2]/3)*t+a[1]/2)*t+a[0]-1);
 }
-inline double cv(int species, double t) {
+ES_GAS_FUNCTION inline double cv(int species, double t) {
     t = std::clamp(t, 200.0, 6000.0);
-    return cvPolynomial(coefficients[species][t <= 1000 ? 0 : 1], t);
+    return cvPolynomial(coefficientsAt(species,t <= 1000 ? 0 : 1), t);
 }
 // Continuous sensible internal energy with u(0)=0. Hold endpoint cv outside
 // the data interval instead of extrapolating the polynomial to negative cv.
-inline double u(int species, double t) {
-    const auto &a = coefficients[species];
+ES_GAS_FUNCTION inline double u(int species, double t) {
+    const double *a[2]={coefficientsAt(species,0),coefficientsAt(species,1)};
     const double low = cv(species, 200) * 200;
     if (t <= 200) return cv(species, 200) * t;
     const double middle = low + integral(a[0], 1000) - integral(a[0], 200);

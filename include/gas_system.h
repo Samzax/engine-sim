@@ -3,6 +3,7 @@
 
 #include "constants.h"
 #include "units.h"
+#include "gas_execution.h"
 
 #include <cfloat>
 #include <cmath>
@@ -40,38 +41,38 @@ class GasSystem {
         };
 
     public:
-        GasSystem() { /* void */ }
-        ~GasSystem() { /* void */ }
+        GasSystem() = default;
+        ~GasSystem() = default;
 
-        void setGeometry(double width, double height, double dx, double dy);
-        void initialize(double P, double V, double T, const Mix &mix = {}, int degreesOfFreedom = 5);
-        void reset(double P, double T, const Mix &mix = {});
-        void setVariableProperties(bool enabled);
-        bool variableProperties() const { return m_variableProperties; }
-        static double molecularMass(const Mix &mix);
-        static double mixtureEnergy(double temperature, const Mix &mix);
-        static double mixtureCv(double temperature, const Mix &mix);
-        double energyAtTemperature(double temperature) const;
-        double heatCapacity(double temperature) const;
-        double molarEnergy(double temperature) const;
-        double molarCv(double temperature) const;
+        ES_GAS_FUNCTION void setGeometry(double width, double height, double dx, double dy);
+        ES_GAS_FUNCTION void initialize(double P, double V, double T, const Mix &mix = {}, int degreesOfFreedom = 5);
+        ES_GAS_FUNCTION void reset(double P, double T, const Mix &mix = {});
+        ES_GAS_FUNCTION void setVariableProperties(bool enabled);
+        ES_GAS_FUNCTION bool variableProperties() const { return m_variableProperties; }
+        ES_GAS_FUNCTION static double molecularMass(const Mix &mix);
+        ES_GAS_FUNCTION static double mixtureEnergy(double temperature, const Mix &mix);
+        ES_GAS_FUNCTION static double mixtureCv(double temperature, const Mix &mix);
+        ES_GAS_FUNCTION double energyAtTemperature(double temperature) const;
+        ES_GAS_FUNCTION double heatCapacity(double temperature) const;
+        ES_GAS_FUNCTION double molarEnergy(double temperature) const;
+        ES_GAS_FUNCTION double molarCv(double temperature) const;
 
-        void setVolume(double V);
-        void setN(double n);
+        ES_GAS_FUNCTION void setVolume(double V);
+        ES_GAS_FUNCTION void setN(double n);
 
-        void changeVolume(double dV);
-        void changePressure(double pressure);
-        void changeTemperature(double dT);
-        void changeTemperature(double dT, double n);
-        void changeEnergy(double dE);
-        void changeMix(const Mix &mix);
-        void injectFuel(double n);
+        ES_GAS_FUNCTION void changeVolume(double dV);
+        ES_GAS_FUNCTION void changePressure(double pressure);
+        ES_GAS_FUNCTION void changeTemperature(double dT);
+        ES_GAS_FUNCTION void changeTemperature(double dT, double n);
+        ES_GAS_FUNCTION void changeEnergy(double dE);
+        ES_GAS_FUNCTION void changeMix(const Mix &mix);
+        ES_GAS_FUNCTION void injectFuel(double n);
 
-        double react(double n, const Mix &mix);
-        static double flowConstant(double flowRate, double P, double pressureDrop, double T, double hcr);
-        static double k_28inH2O(double flowRateScfm);
-        static double k_carb(double flowRateScfm);
-        static double flowRate(
+        ES_GAS_FUNCTION double react(double n, const Mix &mix);
+        ES_GAS_FUNCTION static double flowConstant(double flowRate, double P, double pressureDrop, double T, double hcr);
+        ES_GAS_FUNCTION static double k_28inH2O(double flowRateScfm);
+        ES_GAS_FUNCTION static double k_carb(double flowRateScfm);
+        ES_GAS_FUNCTION static double flowRate(
             double k_flow,
             double P0,
             double P1,
@@ -80,47 +81,47 @@ class GasSystem {
             double hcr,
             double chokedFlowLimit,
             double chokedFlowRateCached);
-        double loseN(double dn, double E_k_per_mol);
-        double gainN(double dn, double E_k_per_mol, const Mix &mix = {});
-        void dissipateExcessVelocity();
+        ES_GAS_FUNCTION double loseN(double dn, double E_k_per_mol);
+        ES_GAS_FUNCTION double gainN(double dn, double E_k_per_mol, const Mix &mix = {});
+        ES_GAS_FUNCTION void dissipateExcessVelocity();
 
-        void updateVelocity(double dt, double beta = 1.0);
-        void dissipateVelocity(double dt, double timeConstant);
+        ES_GAS_FUNCTION void updateVelocity(double dt, double beta = 1.0);
+        ES_GAS_FUNCTION void dissipateVelocity(double dt, double timeConstant);
 
-        static double flow(const FlowParameters &params);
-        double flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix = {});
+        ES_GAS_FUNCTION static double flow(const FlowParameters &params);
+        ES_GAS_FUNCTION double flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix = {});
 
-        double pressureEquilibriumMaxFlow(const GasSystem *b) const;
-        double pressureEquilibriumMaxFlow(double P_env, double T_env) const;
+        ES_GAS_FUNCTION double pressureEquilibriumMaxFlow(const GasSystem *b) const;
+        ES_GAS_FUNCTION double pressureEquilibriumMaxFlow(double P_env, double T_env) const;
 
-        inline static constexpr double kineticEnergyPerMol(double T, int degreesOfFreedom);
-        inline static constexpr double heatCapacityRatio(int degreesOfFreedom);
-        inline static double chokedFlowLimit(int degreesOfFreedom);
-        inline static double chokedFlowRate(int degreesOfFreedom);
+        ES_GAS_FUNCTION inline static constexpr double kineticEnergyPerMol(double T, int degreesOfFreedom);
+        ES_GAS_FUNCTION inline static constexpr double heatCapacityRatio(int degreesOfFreedom);
+        ES_GAS_FUNCTION inline static double chokedFlowLimit(int degreesOfFreedom);
+        ES_GAS_FUNCTION inline static double chokedFlowRate(int degreesOfFreedom);
 
-        inline double approximateDensity() const;
-        inline int degreesOfFreedom() const { return m_degreesOfFreedom; }
-        inline double n() const;
-        inline double n(double V) const;
-        inline double kineticEnergy() const;
-        inline double kineticEnergy(double n) const;
-        inline double kineticEnergyPerMol() const { return kineticEnergy(1.0); }
-        inline double totalEnergy() const;
-        inline double bulkKineticEnergy() const;
-        inline double c() const;
-        inline double dynamicPressure(double dx, double dy) const;
-        inline double mass() const;
-        inline double pressure() const;
-        double temperature() const;
-        inline double velocity_x() const;
-        inline double velocity_y() const;
-        inline double volume() const;
-        inline double volume(double n) const;
-        inline double n_fuel() const;
-        inline double n_inert() const;
-        inline double n_o2() const;
-        inline double heatCapacityRatio() const;
-        inline Mix mix() const { return m_state.mix; }
+        ES_GAS_FUNCTION inline double approximateDensity() const;
+        ES_GAS_FUNCTION inline int degreesOfFreedom() const { return m_degreesOfFreedom; }
+        ES_GAS_FUNCTION inline double n() const;
+        ES_GAS_FUNCTION inline double n(double V) const;
+        ES_GAS_FUNCTION inline double kineticEnergy() const;
+        ES_GAS_FUNCTION inline double kineticEnergy(double n) const;
+        ES_GAS_FUNCTION inline double kineticEnergyPerMol() const { return kineticEnergy(1.0); }
+        ES_GAS_FUNCTION inline double totalEnergy() const;
+        ES_GAS_FUNCTION inline double bulkKineticEnergy() const;
+        ES_GAS_FUNCTION inline double c() const;
+        ES_GAS_FUNCTION inline double dynamicPressure(double dx, double dy) const;
+        ES_GAS_FUNCTION inline double mass() const;
+        ES_GAS_FUNCTION inline double pressure() const;
+        ES_GAS_FUNCTION double temperature() const;
+        ES_GAS_FUNCTION inline double velocity_x() const;
+        ES_GAS_FUNCTION inline double velocity_y() const;
+        ES_GAS_FUNCTION inline double volume() const;
+        ES_GAS_FUNCTION inline double volume(double n) const;
+        ES_GAS_FUNCTION inline double n_fuel() const;
+        ES_GAS_FUNCTION inline double n_inert() const;
+        ES_GAS_FUNCTION inline double n_o2() const;
+        ES_GAS_FUNCTION inline double heatCapacityRatio() const;
+        ES_GAS_FUNCTION inline Mix mix() const { return m_state.mix; }
 
     protected:
         State m_state;
@@ -136,10 +137,10 @@ class GasSystem {
         double m_dy = 0.0;
         bool m_variableProperties = false;
         mutable double m_cachedEnergy = -1, m_cachedN = -1, m_cachedTemperature = 300;
-        void refreshProperties() const;
+        ES_GAS_FUNCTION void refreshProperties() const;
         mutable bool m_propertiesValid = false, m_massPropertiesValid = false;
-        void invalidateProperties() const { m_propertiesValid=false; m_massPropertiesValid=false; }
-        void refreshMass() const {
+        ES_GAS_FUNCTION void invalidateProperties() const { m_propertiesValid=false; m_massPropertiesValid=false; }
+        ES_GAS_FUNCTION void refreshMass() const {
             if (!m_massPropertiesValid) {
                 m_molarMass=molecularMass(m_state.mix);
                 m_massPropertiesValid=true;
@@ -150,20 +151,20 @@ class GasSystem {
         mutable double m_cv200 = 0, m_cv6000 = 0, m_molarMass = 0;
 };
 
-inline constexpr double GasSystem::kineticEnergyPerMol(double T, int degreesOfFreedom) {
+ES_GAS_FUNCTION inline constexpr double GasSystem::kineticEnergyPerMol(double T, int degreesOfFreedom) {
     return 0.5 * T * constants::R * degreesOfFreedom;
 }
 
-inline constexpr double GasSystem::heatCapacityRatio(int degreesOfFreedom) {
+ES_GAS_FUNCTION inline constexpr double GasSystem::heatCapacityRatio(int degreesOfFreedom) {
     return 1.0 + (2.0 / degreesOfFreedom);
 }
 
-inline double GasSystem::chokedFlowLimit(int degreesOfFreedom) {
+ES_GAS_FUNCTION inline double GasSystem::chokedFlowLimit(int degreesOfFreedom) {
     const double hcr = heatCapacityRatio(degreesOfFreedom);
     return std::pow((2.0 / (hcr + 1)), hcr / (hcr - 1));
 }
 
-inline double GasSystem::chokedFlowRate(int degreesOfFreedom) {
+ES_GAS_FUNCTION inline double GasSystem::chokedFlowRate(int degreesOfFreedom) {
     const double hcr = heatCapacityRatio(degreesOfFreedom);
     double flowRate =
         std::sqrt(hcr) * std::pow(2 / (hcr + 1), (hcr + 1) / (2 * (hcr - 1)));
@@ -171,27 +172,27 @@ inline double GasSystem::chokedFlowRate(int degreesOfFreedom) {
     return flowRate;
 }
 
-inline double GasSystem::approximateDensity() const {
+ES_GAS_FUNCTION inline double GasSystem::approximateDensity() const {
     return mass() / volume();
 }
 
-inline double GasSystem::n() const {
+ES_GAS_FUNCTION inline double GasSystem::n() const {
     return m_state.n_mol;
 }
 
-inline double GasSystem::n(double V) const {
+ES_GAS_FUNCTION inline double GasSystem::n(double V) const {
     return (V / volume()) * n();
 }
 
-inline double GasSystem::kineticEnergy() const {
+ES_GAS_FUNCTION inline double GasSystem::kineticEnergy() const {
     return m_state.E_k;
 }
 
-inline double GasSystem::kineticEnergy(double n) const {
+ES_GAS_FUNCTION inline double GasSystem::kineticEnergy(double n) const {
     return (kineticEnergy() / this->n()) * n;
 }
 
-inline double GasSystem::c() const {
+ES_GAS_FUNCTION inline double GasSystem::c() const {
     if (n() == 0 || kineticEnergy() == 0) return 0;
 
     const double hcr = heatCapacityRatio();
@@ -202,7 +203,7 @@ inline double GasSystem::c() const {
     return c;
 }
 
-inline double GasSystem::totalEnergy() const {
+ES_GAS_FUNCTION inline double GasSystem::totalEnergy() const {
     if (n() == 0) return 0;
 
     const double invMass = 1 / mass();
@@ -213,7 +214,7 @@ inline double GasSystem::totalEnergy() const {
     return kineticEnergy() + 0.5 * mass() * v_squared;
 }
 
-inline double GasSystem::bulkKineticEnergy() const {
+ES_GAS_FUNCTION inline double GasSystem::bulkKineticEnergy() const {
     const double m = mass();
     if (m == 0) return 0;
 
@@ -223,7 +224,7 @@ inline double GasSystem::bulkKineticEnergy() const {
     return 0.5 * m * v_squared;
 }
 
-inline double GasSystem::dynamicPressure(double dx, double dy) const {
+ES_GAS_FUNCTION inline double GasSystem::dynamicPressure(double dx, double dy) const {
     if (n() == 0 || kineticEnergy() == 0) return 0;
 
     const double inverseMass = 1 / this->mass();
@@ -263,12 +264,12 @@ inline double GasSystem::dynamicPressure(double dx, double dy) const {
     return staticPressure * (std::sqrt(x_d) - 1);
 }
 
-inline double GasSystem::mass() const {
+ES_GAS_FUNCTION inline double GasSystem::mass() const {
     if (m_variableProperties) { refreshMass(); return m_molarMass * n(); }
     return units::AirMolecularMass * n();
 }
 
-inline double GasSystem::pressure() const {
+ES_GAS_FUNCTION inline double GasSystem::pressure() const {
     if (m_variableProperties) return volume() > 0 ? n() * constants::R * temperature() / volume() : 0;
     const double volume = this->volume();
     return (volume != 0)
@@ -277,37 +278,37 @@ inline double GasSystem::pressure() const {
 }
 
 
-inline double GasSystem::velocity_x() const {
+ES_GAS_FUNCTION inline double GasSystem::velocity_x() const {
     if (n() == 0) return 0;
     else return m_state.momentum[0] / mass();
 }
 
-inline double GasSystem::velocity_y() const {
+ES_GAS_FUNCTION inline double GasSystem::velocity_y() const {
     if (n() == 0) return 0;
     else return m_state.momentum[1] / mass();
 }
 
-inline double GasSystem::volume() const {
+ES_GAS_FUNCTION inline double GasSystem::volume() const {
     return m_state.V;
 }
 
-inline double GasSystem::volume(double n) const {
+ES_GAS_FUNCTION inline double GasSystem::volume(double n) const {
     return n * this->n() / volume();
 }
 
-inline double GasSystem::n_fuel() const {
+ES_GAS_FUNCTION inline double GasSystem::n_fuel() const {
     return m_state.mix.p_fuel * n();
 }
 
-inline double GasSystem::n_inert() const {
+ES_GAS_FUNCTION inline double GasSystem::n_inert() const {
     return m_state.mix.p_inert * n();
 }
 
-inline double GasSystem::n_o2() const {
+ES_GAS_FUNCTION inline double GasSystem::n_o2() const {
     return m_state.mix.p_o2 * n();
 }
 
-inline double GasSystem::heatCapacityRatio() const {
+ES_GAS_FUNCTION inline double GasSystem::heatCapacityRatio() const {
     if (m_variableProperties) return 1 + constants::R / molarCv(temperature());
     return heatCapacityRatio(m_degreesOfFreedom);
 }

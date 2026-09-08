@@ -1,4 +1,5 @@
 #include "../include/gpu_pipe.h"
+#include "../include/gpu_gas.h"
 #include "../include/simulation_profile.h"
 #include "../include/gas_thermo.h"
 #include <cuda_runtime.h>
@@ -6,11 +7,30 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#include <algorithm>
+
+// Compile the same numerical definitions for the device. CPU definitions remain
+// in the ordinary engine-sim library; inline device definitions avoid host stubs.
+#include "gas_system.cpp"
 
 namespace gpu_pipe {
 namespace {
 __constant__ double cp[5][2][5];
 __constant__ double minimumCvRatio[5];
+__global__ void solveTransfers(gpu_gas::Transfer *transfers,int count) {
+    const int index=blockIdx.x*blockDim.x+threadIdx.x;
+    if(index>=count) return;
+    auto &transfer=transfers[index];
+    if(transfer.fixedEnvironment) {
+        transfer.transferredMoles=transfer.a.flow(transfer.conductance,transfer.dt,
+            transfer.b.pressure(),transfer.b.temperature(),transfer.b.mix());
+        return;
+    }
+    GasSystem::FlowParameters p{transfer.conductance,transfer.dt,transfer.directionX,transfer.directionY,
+        transfer.areaA,transfer.areaB,&transfer.a,&transfer.b};
+    transfer.transferredMoles=GasSystem::flow(p);
+}
 constexpr double R=8.31446261815324;
 __device__ double cv(const double *a,double t) {
     return R*((((a[4]*t+a[3])*t+a[2])*t+a[1])*t+a[0]-1);
@@ -166,6 +186,7 @@ struct Context {
             std::strncpy(name,properties.name,sizeof(name)-1);
             check(cudaStreamCreateWithFlags(&stream,cudaStreamNonBlocking),"CUDA stream");
             check(cudaMemcpyToSymbol(cp,gas_thermo::coefficients,sizeof(gas_thermo::coefficients)),"CUDA thermodynamic coefficients");
+            check(cudaMemcpyToSymbol(gas_thermo::deviceCoefficients,gas_thermo::coefficients,sizeof(gas_thermo::coefficients)),"CUDA shared gas coefficients");
             check(cudaMemcpyToSymbol(minimumCvRatio,gas_thermo::minimumCvRatio,sizeof(gas_thermo::minimumCvRatio)),"CUDA heat-capacity bounds");
         } catch(...) { release(); throw; }
     }
@@ -232,5 +253,35 @@ void advance(Pipe *pipes,int count,double dt) {
         std::memcpy(pipes[i].u,c.host[i].u,pipes[i].count*sizeof(pipes[i].u[0]));
         pipes[i].stableTimestep=c.host[i].stableTimestep;
     }
+}
+}
+
+namespace gpu_gas {
+void advance(Transfer *transfers,int count) {
+    if(!transfers || count<1 || count>4096) throw std::invalid_argument("Invalid CUDA gas transfer batch");
+    for(int i=0;i<count;++i) {
+        const auto &t=transfers[i];
+        if(!std::isfinite(t.dt) || t.dt<0 || !std::isfinite(t.conductance) || t.conductance<0
+            || !std::isfinite(t.areaA) || t.areaA<0 || !std::isfinite(t.areaB) || t.areaB<0
+            || !std::isfinite(t.directionX) || !std::isfinite(t.directionY))
+            throw std::invalid_argument("Invalid CUDA gas transfer parameters");
+    }
+    auto &context=gpu_pipe::context();
+    std::vector<Transfer> result(count);
+    Transfer *device=nullptr;
+    const size_t bytes=static_cast<size_t>(count)*sizeof(Transfer);
+    try {
+        gpu_pipe::check(cudaMalloc(&device,bytes),"CUDA gas allocation");
+        gpu_pipe::check(cudaMemcpyAsync(device,transfers,bytes,cudaMemcpyHostToDevice,context.stream),"CUDA gas upload");
+        gpu_pipe::solveTransfers<<<(count+63)/64,64,0,context.stream>>>(device,count);
+        gpu_pipe::check(cudaGetLastError(),"CUDA gas launch");
+        gpu_pipe::check(cudaMemcpyAsync(result.data(),device,bytes,cudaMemcpyDeviceToHost,context.stream),"CUDA gas download");
+        gpu_pipe::check(cudaStreamSynchronize(context.stream),"CUDA gas completion");
+        gpu_pipe::check(cudaFree(device),"CUDA gas release"); device=nullptr;
+    } catch(...) {
+        if(device) cudaFree(device);
+        throw;
+    }
+    std::copy(result.begin(),result.end(),transfers);
 }
 }

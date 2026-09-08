@@ -6,6 +6,7 @@
 #include "../include/lubrication_model.h"
 #include "../include/gas_pipe.h"
 #include "../include/gas_thermo.h"
+#include "../include/gpu_gas.h"
 #include "../include/units.h"
 #include "../include/csv_io.h"
 
@@ -141,6 +142,74 @@ TEST(GasSystemTests, CudaPipeMatchesCpuAndConservesEnergy) {
         // A retained reference can mutate the cell after the cached GPU result.
         retained.changeTemperature(10000);
         EXPECT_NEAR(intake.stableTimestep(),exactCfl(),1e-14);
+    }
+}
+
+TEST(GasSystemTests, CudaGasTransfersMatchCpuAndConserveClosedSystem) {
+    if(!gpu_pipe::enabled()) GTEST_SKIP() << "Set ENGINE_SIM_GPU=1 in a CUDA build";
+    std::vector<gpu_gas::Transfer> actual;
+    const double temperatures[]={150,300,1000,2500,7000};
+    for(bool advanced : {false,true}) for(bool environment : {false,true})
+        for(double pa : {0.0,1e3,1e5,1e7}) for(double pb : {0.0,1e3,1e5,1e7}) {
+            if(environment && (pb==0 || !advanced)) continue;
+            for(int temperature=0;temperature<5;++temperature) for(int mode=0;mode<3;++mode) {
+                gpu_gas::Transfer t;
+                t.a.setVariableProperties(advanced); t.b.setVariableProperties(advanced);
+                GasSystem::Mix ma{.02,.78,.20},mb{.008,.842,.15};
+                ma.p_co2=.12; ma.p_h2o=.16; ma.residualFraction=.2;
+                mb.p_co2=.02; mb.p_h2o=.03; mb.residualFraction=.65;
+                mb.fuelMolecularMass=.044; mb.oxygenPerFuel=3;
+                t.a.initialize(pa,.001,temperatures[temperature],ma);
+                t.b.initialize(pb,.002,temperatures[4-temperature],mb);
+                t.a.setGeometry(.1,.1,1,0); t.b.setGeometry(.2,.1,1,0);
+                t.conductance=mode==0?0:GasSystem::k_28inH2O(100);
+                t.dt=mode==2?0:1e-8;
+                t.areaA=temperature%2?.001:0; t.areaB=.002;
+                t.directionX=temperature%2; t.directionY=1-t.directionX;
+                t.fixedEnvironment=environment;
+                actual.push_back(t);
+            }
+        }
+    auto expected=actual;
+    std::vector<double> initialMass,initialEnergy;
+    for(const auto &t:actual) {
+        initialMass.push_back(t.a.mass()+t.b.mass());
+        initialEnergy.push_back(t.a.totalEnergy()+t.b.totalEnergy());
+    }
+    for(int step=0;step<5;++step) {
+        for(auto &t:expected) {
+            if(t.fixedEnvironment) t.transferredMoles=t.a.flow(t.conductance,t.dt,t.b.pressure(),t.b.temperature(),t.b.mix());
+            else {
+                GasSystem::FlowParameters p{t.conductance,t.dt,t.directionX,t.directionY,t.areaA,t.areaB,&t.a,&t.b};
+                t.transferredMoles=GasSystem::flow(p);
+            }
+        }
+        gpu_gas::advance(actual.data(),static_cast<int>(actual.size()));
+        for(size_t i=0;i<actual.size();++i) {
+            SCOPED_TRACE(i);
+            SCOPED_TRACE(step);
+            const auto &got=actual[i],&want=expected[i];
+            EXPECT_NEAR(got.transferredMoles,want.transferredMoles,(std::max)(1e-14,1e-8*std::abs(want.transferredMoles)));
+            for(auto pair : {std::make_pair(&got.a,&want.a),std::make_pair(&got.b,&want.b)}) {
+                const auto &a=*pair.first,&b=*pair.second;
+                EXPECT_NEAR(a.n(),b.n(),1e-9*(std::max)(1e-10,b.n()));
+                EXPECT_NEAR(a.totalEnergy(),b.totalEnergy(),1e-8*(std::max)(1.0,std::abs(b.totalEnergy())));
+                EXPECT_NEAR(a.temperature(),b.temperature(),1e-8*(std::max)(1.0,b.temperature()));
+                EXPECT_NEAR(a.pressure(),b.pressure(),1e-8*(std::max)(1.0,b.pressure()));
+                EXPECT_NEAR(a.velocity_x(),b.velocity_x(),1e-7);
+                EXPECT_NEAR(a.velocity_y(),b.velocity_y(),1e-7);
+                EXPECT_NEAR(a.mix().p_fuel,b.mix().p_fuel,1e-10);
+                EXPECT_NEAR(a.mix().p_o2,b.mix().p_o2,1e-10);
+                EXPECT_NEAR(a.mix().p_co2,b.mix().p_co2,1e-10);
+                EXPECT_NEAR(a.mix().p_h2o,b.mix().p_h2o,1e-10);
+                EXPECT_NEAR(a.mix().residualFraction,b.mix().residualFraction,1e-10);
+                EXPECT_NEAR(a.mix().fuelMolecularMass,b.mix().fuelMolecularMass,1e-10);
+            }
+            if(!got.fixedEnvironment) {
+                EXPECT_NEAR(got.a.mass()+got.b.mass(),initialMass[i],1e-10*(std::max)(1e-12,initialMass[i]));
+                EXPECT_NEAR(got.a.totalEnergy()+got.b.totalEnergy(),initialEnergy[i],1e-10*(std::max)(1e-8,initialEnergy[i]));
+            }
+        }
     }
 }
 
