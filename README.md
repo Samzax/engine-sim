@@ -1,4 +1,16 @@
 # Engine Simulator
+
+This fork's `fix/review-correctness` branch includes correctness fixes, portable
+Windows packaging, and headless simulation/audio recording. See the
+[fixes and verification notes](docs/correctness-fixes.md),
+[build/package instructions](docs/portable-release.md), and
+[headless runner guide](docs/headless.md).
+
+Portable ZIPs are uploaded by successful Windows Release jobs in this fork's
+[Actions runs](https://github.com/Samzax/engine-sim/actions/workflows/cmake.yml).
+Extract the entire artifact ZIP and run the included `engine-sim-app.exe`.
+These builds belong to this fork; the original project's information follows.
+
 ![Alt text](docs/public/screenshots/screenshot_v01.png?raw=true)
 ---
 # Engine Simulator has moved!
