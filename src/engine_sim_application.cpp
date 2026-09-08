@@ -18,6 +18,7 @@
 #include <memory>
 #include <limits>
 #include <fstream>
+#include <filesystem>
 
 #include "../scripting/include/compiler.h"
 
@@ -128,8 +129,10 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
             || enginePath.empty() || m_assetPath.empty()) {
             startupFailure("Invalid delta.conf: expected an engine directory and an assets directory on separate lines.");
         }
-        enginePath = modulePath.Append(enginePath).ToString();
-        m_assetPath = modulePath.Append(m_assetPath).ToString();
+        if (!std::filesystem::path(enginePath).is_absolute())
+            enginePath = modulePath.Append(enginePath).ToString();
+        if (!std::filesystem::path(m_assetPath).is_absolute())
+            m_assetPath = modulePath.Append(m_assetPath).ToString();
 
         confFile.close();
     }
@@ -218,13 +221,14 @@ void EngineSimApplication::initialize() {
 
     m_audioSource = m_engine.GetAudioDevice()->CreateSource(m_outputAudioBuffer);
     if (m_audioSource == nullptr) startupFailure("Could not create the output audio source.");
+    checkStartup(m_audioSource->SetVolume(m_diagnosticMode ? 0.0f : 1.0f), "Audio volume initialization");
     m_audioSource->SetMode((m_simulator->getEngine() != nullptr)
         ? ysAudioSource::Mode::Loop
         : ysAudioSource::Mode::Stop);
     m_audioSource->SetPan(0.0f);
-    m_audioSource->SetVolume(1.0f);
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
+    if (!m_diagnosticMode) {
     // Create a global instance of discord-rpc
     CDiscord::CreateInstance();
 
@@ -237,6 +241,7 @@ void EngineSimApplication::initialize() {
         : "Broken Engine";
 
     GetDiscordManager()->SetStatus(passMe, engineName, s_buildVersion);
+    }
 #endif /* ATG_ENGINE_SIM_DISCORD_ENABLED */
 }
 
@@ -391,9 +396,10 @@ float EngineSimApplication::unitsToPixels(float units) const {
     return units * f;
 }
 
-void EngineSimApplication::run() {
+void EngineSimApplication::run(int maxFrames) {
+    int frames = 0;
     while (true) {
-        m_engine.StartFrame();
+        checkStartup(m_engine.StartFrame(), "Start frame");
 
         if (!m_engine.IsOpen()) break;
         if (m_engine.ProcessKeyDown(ysKey::Code::Escape)) {
@@ -454,12 +460,15 @@ void EngineSimApplication::run() {
 
         renderScene();
 
-        m_engine.EndFrame();
+        checkStartup(m_engine.EndFrame(), "Render frame");
+        if (maxFrames > 0 && ++frames >= maxFrames) break;
 
         if (isRecording()) {
             recordFrame();
         }
     }
+
+    if (maxFrames > 0 && frames != maxFrames) startupFailure("GUI diagnostic window closed before completing its frames.");
 
     if (isRecording()) {
         stopRecording();

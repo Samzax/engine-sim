@@ -39,7 +39,8 @@ class EngineSimApplication {
         static std::string getBuildVersion() { return s_buildVersion; }
 
         void initialize(void *instance, ysContextObject::DeviceAPI api);
-        void run();
+        void run(int maxFrames = 0);
+        void setDiagnosticMode() { m_diagnosticMode = true; }
         void destroy();
 
         bool loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);
@@ -96,6 +97,7 @@ class EngineSimApplication {
         void refreshUserInterface();
 
     protected:
+        bool m_diagnosticMode = false;
         double m_speedSetting = 1.0;
         double m_targetSpeedSetting = 1.0;
 

@@ -317,6 +317,15 @@ target_include_directories(engine-sim-app
 add_subdirectory(dependencies)
 include(cmake/DeltaAudioFix.cmake)
 if (WIN32)
+    # Upstream links both retail and SDK-only debug D3DX libraries in every
+    # configuration. Link order then makes Release require d3dx10d_43.dll.
+    # Use the redistributable retail runtime for both application configurations.
+    foreach(_property LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+        get_target_property(_delta_links delta-core ${_property})
+        list(FILTER _delta_links EXCLUDE REGEX "/d3dx(9|10|11)d\\.lib$")
+        set_property(TARGET delta-core PROPERTY ${_property} "${_delta_links}")
+    endforeach()
+    add_executable(engine-sim-gui-check EXCLUDE_FROM_ALL tools/gui-check.cpp)
     add_executable(engine-sim-audio-device-check EXCLUDE_FROM_ALL tools/audio-device-check.cpp)
     target_link_libraries(engine-sim-audio-device-check delta-core dsound)
 endif()
