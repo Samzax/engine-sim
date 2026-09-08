@@ -707,6 +707,8 @@ bool EngineSimApplication::loadEngine(
     createObjects(engine);
 
     m_viewParameters.Layer1 = engine->getMaxDepth();
+    m_viewParameters.Layer0 = (std::max)(0,
+        (std::min)(m_viewParameters.Layer0, m_viewParameters.Layer1 - 1));
     m_simulator->startAudioRenderingThread();
     return true;
 }
