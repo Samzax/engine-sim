@@ -162,6 +162,11 @@ uniform gray frame decoded with a black bottom row. With the generated-source
 fix, every decoded row had the expected brightness. This also applies to RGBA
 window capture when its packed row width differs from FFmpeg's alignment.
 
+Encoder shutdown now sends a flush frame and drains delayed packets before
+writing the container trailer. A 30-frame MPEG-2 recording previously decoded
+as only 28 frames; after the fix, both successive recordings decoded as all 30.
+Trailer-write errors are also propagated to the recorder's error state.
+
 In builds without video capture, the recording shortcut now reports that the
 feature is unavailable instead of silently setting the recording flag. Enabled
 builds reject recording dimensions when either dimension is nonpositive, and

@@ -57,6 +57,17 @@ if (_match EQUAL -1)
     message(FATAL_ERROR "Video frame copy changed; review cmake/VideoCaptureFix.cmake")
 endif()
 string(REPLACE "${_packed_copy}" "${_strided_copy}" _encoder_code "${_encoder_code}")
+set(_old_trailer "    av_write_trailer(oc);")
+set(_flushed_trailer [=[    // Drain delayed packets before finalizing the container.
+    err = writeFrame(oc, videoStream.codecContext, videoStream.av_stream,
+        nullptr, videoStream.tempPacket);
+    if (err != Error::None) goto end;
+    if (av_write_trailer(oc) < 0) err = Error::CouldNotWriteOutputPacket;]=])
+string(FIND "${_encoder_code}" "${_old_trailer}" _match)
+if (_match EQUAL -1)
+    message(FATAL_ERROR "Video trailer changed; review cmake/VideoCaptureFix.cmake")
+endif()
+string(REPLACE "${_old_trailer}" "${_flushed_trailer}" _encoder_code "${_encoder_code}")
 string(REPLACE "\"../include/" "\"${_video_dir}/include/" _encoder_code "${_encoder_code}")
 set(_patched_encoder "${PROJECT_BINARY_DIR}/dependency-fixes/encoder.cpp")
 set(_previous_encoder "")
