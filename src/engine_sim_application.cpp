@@ -539,17 +539,29 @@ void EngineSimApplication::run(int maxFrames) {
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Return)
             || (m_diagnosticMode && (frames == 40 || frames == 80))) {
-            Simulator *previous = m_simulator;
-            m_audioSource->SetMode(ysAudioSource::Mode::Stop);
-            // A directory cannot be an engine script: exercise a failed load
-            // without changing the user's files, through the same audio path.
-            const bool expectedFailure = m_diagnosticMode && frames == 80;
-            loadScript(expectedFailure ? m_assetPath : "");
-            if (m_diagnosticMode && (m_iceEngine == nullptr
-                || (expectedFailure ? m_simulator != previous : m_simulator == previous)))
-                startupFailure("GUI diagnostic reload did not preserve or replace the engine as expected.");
-            if (m_simulator->getEngine() != nullptr) {
-                m_audioSource->SetMode(ysAudioSource::Mode::Loop);
+            const auto setPlaybackMode = [this](ysAudioSource::Mode mode, const char *failure) {
+                const ysError error = m_audioSource->SetMode(mode);
+                if (error == ysError::None) return true;
+                const std::string message = std::string(failure) + " (error "
+                    + std::to_string(static_cast<int>(error)) + ")";
+                if (m_diagnosticMode) startupFailure(message);
+                std::ofstream log("error_log.log", std::ios::app);
+                log << message << '\n';
+                m_infoCluster->setLogMessage(message);
+                return false;
+            };
+            if (setPlaybackMode(ysAudioSource::Mode::Stop, "Reload cancelled: audio could not stop")) {
+                Simulator *previous = m_simulator;
+                // A directory cannot be an engine script: exercise a failed load
+                // without changing the user's files, through the same audio path.
+                const bool expectedFailure = m_diagnosticMode && frames == 80;
+                loadScript(expectedFailure ? m_assetPath : "");
+                if (m_diagnosticMode && (m_iceEngine == nullptr
+                    || (expectedFailure ? m_simulator != previous : m_simulator == previous)))
+                    startupFailure("GUI diagnostic reload did not preserve or replace the engine as expected.");
+                if (m_simulator->getEngine() != nullptr) {
+                    setPlaybackMode(ysAudioSource::Mode::Loop, "Audio could not restart; press Enter to retry");
+                }
             }
         }
 
