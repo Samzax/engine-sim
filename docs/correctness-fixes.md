@@ -490,3 +490,10 @@ enabled RPM hold, disabled it, then called the same clearing functions. Its fina
 frame showed zero torque/power and an engine still running. The temporary control
 override was restored and the normal Release executable rebuilt. This exercised
 the clearing functions without injecting a physical Delete key.
+
+The leveler target and gain bounds are now applied once per rendered block from
+its existing parameter snapshot, rather than reassigned for every sample. A
+2-second headless Hayabusa recording (2 seconds starter, 0.2 speed input) produced
+byte-identical WAV files before and after, including 88553 samples. The existing
+audio regression executable and Release builds passed. These checks establish
+output preservation for that run, not a measured overall performance increase.

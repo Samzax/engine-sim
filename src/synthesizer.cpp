@@ -287,6 +287,9 @@ void Synthesizer::renderBlock(bool waitForInput) {
         m_filters[i].jitterFilter.setJitterScale(params.inputSampleNoise);
     }
 
+    m_levelingFilter.p_target = params.levelerTarget;
+    m_levelingFilter.p_minLevel = params.levelerMinGain;
+    m_levelingFilter.p_maxLevel = params.levelerMaxGain;
     for (int i = 0; i < n; ++i) {
         m_outputStaging[i] = renderSample(i, params);
     }
@@ -366,9 +369,6 @@ int16_t Synthesizer::renderSample(int inputSample, const AudioParameters &params
 
     signal = m_antialiasing.fast_f(signal);
 
-    m_levelingFilter.p_target = params.levelerTarget;
-    m_levelingFilter.p_minLevel = params.levelerMinGain;
-    m_levelingFilter.p_maxLevel = params.levelerMaxGain;
     const float v_leveled = m_levelingFilter.f(signal) * params.volume;
     if (!std::isfinite(v_leveled)) return 0;
     int r_int = std::lround(clamp(v_leveled, (float)INT16_MIN, (float)INT16_MAX));
