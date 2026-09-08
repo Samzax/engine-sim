@@ -1,9 +1,11 @@
 #ifndef ATG_ENGINE_SIM_RING_BUFFER_H
 #define ATG_ENGINE_SIM_RING_BUFFER_H
 
-#include "part.h"
-
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
 #include <cstring>
+#include <stdexcept>
 
 template <typename T_Data>
 class RingBuffer {
@@ -13,6 +15,7 @@ public:
         m_capacity = 0;
         m_writeIndex = 0;
         m_start = 0;
+        m_size = 0;
     }
 
     ~RingBuffer() {
@@ -20,10 +23,13 @@ public:
     }
 
     void initialize(size_t capacity) {
+        if (capacity == 0) throw std::invalid_argument("Ring buffer capacity must be positive");
+        destroy();
         m_buffer = new T_Data[capacity];
         m_capacity = capacity;
         m_writeIndex = 0;
         m_start = 0;
+        m_size = 0;
     }
 
     void destroy() {
@@ -35,9 +41,14 @@ public:
         m_capacity = 0;
         m_writeIndex = 0;
         m_start = 0;
+        m_size = 0;
     }
 
     inline void write(T_Data data) {
+        assert(m_capacity != 0);
+        // A full queue retains the newest capacity samples.
+        if (m_size == m_capacity) m_start = (m_start + 1) % m_capacity;
+        else ++m_size;
         m_buffer[m_writeIndex] = data;
 
         if (++m_writeIndex >= m_capacity) {
@@ -46,7 +57,8 @@ public:
     }
 
     inline void overwrite(T_Data data, size_t index) {
-        if (start + index < m_capacity) {
+        assert(index < m_size);
+        if (m_start + index < m_capacity) {
             m_buffer[m_start + index] = data;
         }
         else {
@@ -70,12 +82,15 @@ public:
     }
 
     inline T_Data read(size_t index) const {
+        assert(index < m_size);
         return (m_start + index) >= m_capacity
             ? m_buffer[m_start + index - m_capacity]
             : m_buffer[m_start + index];
     }
 
     inline void read(size_t n, T_Data *target) {
+        assert(n <= m_size);
+        if (n == 0) return;
         if (m_start + n < m_capacity) {
             memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
         }
@@ -92,6 +107,8 @@ public:
     }
 
     inline void readAndRemove(size_t n, T_Data *target) {
+        assert(n <= m_size);
+        if (n == 0) return;
         if (m_start + n < m_capacity) {
             memcpy(target, m_buffer + m_start, n * sizeof(T_Data));
         }
@@ -107,16 +124,22 @@ public:
         }
 
         m_start += n;
+        m_size -= n;
         if (m_start >= m_capacity) {
             m_start -= m_capacity;
         }
     }
 
     inline void setWriteIndex(size_t writeIndex) {
+        assert(writeIndex < m_capacity);
         m_writeIndex = writeIndex;
+        m_size = (m_writeIndex + m_capacity - m_start) % m_capacity;
     }
 
     inline void removeBeginning(size_t n) {
+        assert(n <= m_size);
+        if (n == 0) return;
+        m_size -= n;
         m_start += n;
         if (m_start >= m_capacity) {
             m_start -= m_capacity;
@@ -124,14 +147,16 @@ public:
     }
 
     inline void setStartIndex(size_t startIndex) {
+        assert(startIndex < m_capacity);
         m_start = startIndex;
+        m_size = (m_writeIndex + m_capacity - m_start) % m_capacity;
     }
 
     inline size_t size() const {
-        return (m_writeIndex < m_start)
-            ? m_writeIndex + (m_capacity - m_start)
-            : m_writeIndex - m_start;
+        return m_size;
     }
+
+    inline size_t capacity() const { return m_capacity; }
 
     inline size_t writeIndex() const {
         return m_writeIndex;
@@ -146,6 +171,7 @@ private:
     size_t m_capacity;
     size_t m_writeIndex;
     size_t m_start;
+    size_t m_size;
 };
 
 #endif /* ATG_ENGINE_SIM_RING_BUFFER_H */

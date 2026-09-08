@@ -13,6 +13,10 @@
 #include "../include/exhaust_system.h"
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
+#include "../include/piston_engine_simulator.h"
+#include "../include/wave_reader.h"
+#include <memory>
+#include <limits>
 
 #include "../scripting/include/compiler.h"
 
@@ -21,7 +25,7 @@
 #include <sstream>
 
 #if ATG_ENGINE_SIM_DISCORD_ENABLED
-#include "../discord/Discord.h"
+#include "../dependencies/discord/Discord.h"
 #endif
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
@@ -164,7 +168,10 @@ void EngineSimApplication::initialize() {
     m_textRenderer.SetRenderer(m_engine.GetUiRenderer());
     m_textRenderer.SetFont(m_engine.GetConsole()->GetFont());
 
+    // Keep a valid empty simulator for the UI if the first script fails.
+    m_simulator = new PistonEngineSimulator;
     loadScript();
+    m_audioScratch.resize(44100);
 
     m_audioBuffer.initialize(44100, 44100);
     m_audioBuffer.m_writePointer = (int)(44100 * 0.1);
@@ -270,7 +277,7 @@ void EngineSimApplication::process(float frame_dt) {
         maxWrite = 0;
     }
 
-    int16_t *samples = new int16_t[maxWrite];
+    int16_t *samples = m_audioScratch.data();
     const int readSamples = m_simulator->readAudioOutput(maxWrite, samples);
 
     for (SampleOffset i = 0; i < (SampleOffset)readSamples && i < maxWrite; ++i) {
@@ -285,8 +292,6 @@ void EngineSimApplication::process(float frame_dt) {
 
         m_oscillatorSampleOffset = (m_oscillatorSampleOffset + 1) % (44100 / 10);
     }
-
-    delete[] samples;
 
     if (readSamples > 0) {
         SampleOffset size0, size1;
@@ -422,6 +427,22 @@ void EngineSimApplication::run() {
 }
 
 void EngineSimApplication::destroy() {
+    if (m_simulator != nullptr) {
+        m_simulator->releaseSimulation();
+        delete m_simulator;
+        m_simulator = nullptr;
+    }
+    m_uiManager.destroy();
+    destroyObjects();
+    if (m_iceEngine != nullptr) {
+        m_iceEngine->destroy();
+        delete m_iceEngine;
+        m_iceEngine = nullptr;
+    }
+    delete m_vehicle;
+    m_vehicle = nullptr;
+    delete m_transmission;
+    m_transmission = nullptr;
     m_shaderSet.Destroy();
 
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
@@ -430,15 +451,53 @@ void EngineSimApplication::destroy() {
     m_assetManager.Destroy();
     m_engine.Destroy();
 
-    m_simulator->destroy();
     m_audioBuffer.destroy();
 }
 
-void EngineSimApplication::loadEngine(
+bool EngineSimApplication::loadEngine(
     Engine *engine,
     Vehicle *vehicle,
     Transmission *transmission)
 {
+    if (engine == nullptr || vehicle == nullptr || transmission == nullptr
+        || engine->getCrankshaftCount() <= 0 || engine->getCylinderCount() <= 0
+        || engine->getCylinderBankCount() <= 0 || engine->getExhaustSystemCount() <= 0
+        || engine->getIntakeCount() <= 0 || !std::isfinite(engine->getSimulationFrequency())
+        || engine->getSimulationFrequency() < 1
+        || engine->getSimulationFrequency() > (std::numeric_limits<int>::max)()) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Invalid engine: check component counts and simulation frequency.\n";
+        return false;
+    }
+
+    std::unique_ptr<Simulator> replacement;
+    try {
+        replacement.reset(engine->createSimulator(vehicle, transmission));
+        engine->calculateDisplacement();
+        auto audioParams = replacement->synthesizer().getAudioParameters();
+        audioParams.inputSampleNoise = static_cast<float>(engine->getInitialJitter());
+        audioParams.airNoise = static_cast<float>(engine->getInitialNoise());
+        audioParams.dF_F_mix = static_cast<float>(engine->getInitialHighFrequencyGain());
+        replacement->synthesizer().setAudioParameters(audioParams);
+
+        for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
+            ImpulseResponse *response = engine->getExhaustSystem(i)->getImpulseResponse();
+            std::vector<int16_t> impulse;
+            const bool loaded = response != nullptr && readImpulseWave(response->getFilename(), 44100, impulse);
+            replacement->synthesizer().initializeImpulseResponse(
+                loaded ? impulse.data() : nullptr, static_cast<unsigned>(impulse.size()),
+                response != nullptr ? response->getVolume() : 1.0f, i);
+            if (!loaded) {
+                std::ofstream log("error_log.log", std::ios::app);
+                log << "Using dry audio: missing or unsupported mono PCM16 44100 Hz impulse response.\n";
+            }
+        }
+    } catch (const std::exception &error) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Unable to load replacement engine: " << error.what() << '\n';
+        return false;
+    }
+
     destroyObjects();
 
     if (m_simulator != nullptr) {
@@ -465,48 +524,13 @@ void EngineSimApplication::loadEngine(
     m_vehicle = vehicle;
     m_transmission = transmission;
 
-    m_simulator = engine->createSimulator(vehicle, transmission);
-
-    if (engine == nullptr || vehicle == nullptr || transmission == nullptr) {
-        m_iceEngine = nullptr;
-        m_viewParameters.Layer1 = 0;
-
-        return;
-    }
+    m_simulator = replacement.release();
 
     createObjects(engine);
 
     m_viewParameters.Layer1 = engine->getMaxDepth();
-    engine->calculateDisplacement();
-
-    m_simulator->setSimulationFrequency(engine->getSimulationFrequency());
-
-    Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-    audioParams.inputSampleNoise = static_cast<float>(engine->getInitialJitter());
-    audioParams.airNoise = static_cast<float>(engine->getInitialNoise());
-    audioParams.dF_F_mix = static_cast<float>(engine->getInitialHighFrequencyGain());
-    m_simulator->synthesizer().setAudioParameters(audioParams);
-
-    for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
-        ImpulseResponse *response = engine->getExhaustSystem(i)->getImpulseResponse();
-
-        ysWindowsAudioWaveFile waveFile;
-        waveFile.OpenFile(response->getFilename().c_str());
-        waveFile.InitializeInternalBuffer(waveFile.GetSampleCount());
-        waveFile.FillBuffer(0);
-        waveFile.CloseFile();
-
-        m_simulator->synthesizer().initializeImpulseResponse(
-            reinterpret_cast<const int16_t *>(waveFile.GetBuffer()),
-            waveFile.GetSampleCount(),
-            response->getVolume(),
-            i
-        );
-
-        waveFile.DestroyInternalBuffer();
-    }
-
     m_simulator->startAudioRenderingThread();
+    return true;
 }
 
 void EngineSimApplication::drawGenerated(
@@ -619,6 +643,8 @@ void EngineSimApplication::loadScript() {
     Engine *engine = nullptr;
     Vehicle *vehicle = nullptr;
     Transmission *transmission = nullptr;
+    ApplicationSettings settings;
+    bool executed = false;
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
     es_script::Compiler compiler;
@@ -626,7 +652,8 @@ void EngineSimApplication::loadScript() {
     const bool compiled = compiler.compile("../assets/main.mr");
     if (compiled) {
         const es_script::Compiler::Output output = compiler.execute();
-        configure(output.applicationSettings);
+        settings = output.applicationSettings;
+        executed = output.success;
 
         engine = output.engine;
         vehicle = output.vehicle;
@@ -640,6 +667,15 @@ void EngineSimApplication::loadScript() {
 
     compiler.destroy();
 #endif /* ATG_ENGINE_SIM_PIRANHA_ENABLED */
+
+    if (!executed || engine == nullptr) {
+        if (engine != nullptr) { engine->destroy(); delete engine; }
+        delete vehicle;
+        delete transmission;
+        if (m_infoCluster == nullptr) refreshUserInterface();
+        m_infoCluster->setLogMessage("Script failed; keeping current engine. See error_log.log");
+        return;
+    }
 
     if (vehicle == nullptr) {
         Vehicle::Parameters vehParams;
@@ -663,7 +699,16 @@ void EngineSimApplication::loadScript() {
         transmission->initialize(tParams);
     }
 
-    loadEngine(engine, vehicle, transmission);
+    if (!loadEngine(engine, vehicle, transmission)) {
+        engine->destroy();
+        delete engine;
+        delete vehicle;
+        delete transmission;
+        if (m_infoCluster == nullptr) refreshUserInterface();
+        m_infoCluster->setLogMessage("Invalid engine; keeping current engine. See error_log.log");
+        return;
+    }
+    configure(settings);
     refreshUserInterface();
 }
 

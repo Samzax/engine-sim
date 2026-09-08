@@ -75,6 +75,7 @@ ExhaustSystem *es_script::EngineContext::getExhaust(ExhaustSystemNode *exhaust) 
 
 void es_script::EngineContext::addFunction(FunctionNode *node, Function *function) {
     m_functions[node] = function;
+    m_engine->ownFunction(function);
 }
 
 Function *es_script::EngineContext::getFunction(FunctionNode *exhaust) const {
@@ -90,6 +91,7 @@ void es_script::EngineContext::addImpulseResponse(
     ImpulseResponse *impulse)
 {
     m_impulseResponses[node] = impulse;
+    m_engine->ownImpulseResponse(impulse);
 }
 
 ImpulseResponse *es_script::EngineContext::getImpulseResponse(

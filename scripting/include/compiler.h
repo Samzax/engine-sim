@@ -13,6 +13,7 @@ namespace es_script {
     class Compiler {
     public:
         struct Output {
+            bool success = false;
             Engine *engine = nullptr;
             Vehicle *vehicle = nullptr;
             Transmission *transmission = nullptr;

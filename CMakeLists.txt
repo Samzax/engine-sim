@@ -1,4 +1,19 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
+
+project(engine-sim)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
+option(AUDIO_TESTS_ONLY "Build portable audio regression tests without graphics dependencies" OFF)
+if (BUILD_TESTING)
+    include(cmake/AudioTests.cmake)
+endif()
+if (AUDIO_TESTS_ONLY)
+    if (NOT BUILD_TESTING)
+        message(FATAL_ERROR "AUDIO_TESTS_ONLY requires BUILD_TESTING")
+    endif()
+    return()
+endif()
 
 option(DTV "Enable video output" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
@@ -13,20 +28,18 @@ if (PIRANHA_ENABLED)
 endif (PIRANHA_ENABLED)
 
 if (DISCORD_ENABLED)
-    add_compile_definitions(ATG_ENGINE_SIM_DISCORD_ENABLED)
+    # The bundled RPC binary is Release-only and cannot link against /MDd.
+    add_compile_definitions($<$<NOT:$<CONFIG:Debug>>:ATG_ENGINE_SIM_DISCORD_ENABLED>)
 endif (DISCORD_ENABLED)
 
 # Enable group projects in folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 
-project(engine-sim)
-
-set(CMAKE_CXX_STANDARD 17)
-
 # ========================================================
 # GTEST
 
+if (BUILD_TESTING)
 include(FetchContent)
 FetchContent_Declare(
     googletest
@@ -41,6 +54,7 @@ set_property(TARGET gmock PROPERTY FOLDER "gtest")
 set_property(TARGET gmock_main PROPERTY FOLDER "gtest")
 set_property(TARGET gtest PROPERTY FOLDER "gtest")
 set_property(TARGET gtest_main PROPERTY FOLDER "gtest")
+endif()
 
 # ========================================================
 
@@ -86,6 +100,7 @@ add_library(engine-sim STATIC
     src/valvetrain.cpp
     src/vehicle.cpp
     src/vehicle_drag_constraint.cpp
+    src/wave_reader.cpp
     src/vtec_valvetrain.cpp
 
     # Include files
@@ -292,8 +307,8 @@ if (DISCORD_ENABLED)
     add_library(discord-rpc STATIC IMPORTED)
     set_property(TARGET discord-rpc PROPERTY IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/dependencies/discord/lib/discord-rpc.lib)
     target_link_libraries(engine-sim-app
-    	discord
-	discord-rpc)
+        $<$<NOT:$<CONFIG:Debug>>:discord>
+        $<$<NOT:$<CONFIG:Debug>>:discord-rpc>)
 endif (DISCORD_ENABLED)
 
 target_include_directories(engine-sim-app
@@ -303,7 +318,7 @@ add_subdirectory(dependencies)
 
 # GTEST
 
-enable_testing()
+if (BUILD_TESTING)
 
 add_executable(engine-sim-test
     # Source files
@@ -318,4 +333,9 @@ target_link_libraries(engine-sim-test
 )
 
 include(GoogleTest)
-gtest_discover_tests(engine-sim-test)
+if (PIRANHA_ENABLED)
+    target_sources(engine-sim-test PRIVATE test/simulator_regression_tests.cpp)
+    target_link_libraries(engine-sim-test engine-sim-script-interpreter)
+endif()
+gtest_discover_tests(engine-sim-test WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()

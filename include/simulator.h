@@ -54,7 +54,7 @@ public:
     Vehicle *getVehicle() const { return m_vehicle; }
     atg_scs::RigidBodySystem *getSystem() { return m_system; }
 
-    void setSimulationFrequency(int frequency) { m_simulationFrequency = frequency; }
+    virtual void setSimulationFrequency(int frequency);
     int getSimulationFrequency() const { return m_simulationFrequency; }
 
     double getTimestep() const { return 1.0 / m_simulationFrequency; }

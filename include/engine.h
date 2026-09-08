@@ -16,10 +16,12 @@
 #include "throttle.h"
 
 #include <string>
+#include <vector>
 
 class Simulator;
 class Vehicle;
 class Transmission;
+class Valvetrain;
 class Engine : public Part {
     public:
         struct Parameters {
@@ -109,6 +111,13 @@ class Engine : public Part {
 
         virtual Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission);
 
+        // Script-generated resources may be shared by several cylinders. The
+        // engine owns each allocation once; individual components only borrow it.
+        void ownFunction(Function *value) { m_ownedFunctions.push_back(value); }
+        void ownImpulseResponse(ImpulseResponse *value) { m_ownedImpulses.push_back(value); }
+        void ownPart(Part *value) { m_ownedParts.push_back(value); }
+        void ownValvetrain(Valvetrain *value) { m_ownedValvetrains.push_back(value); }
+
     protected:
         std::string m_name;
 
@@ -149,6 +158,10 @@ class Engine : public Part {
 
         double m_throttleValue;
         double m_displacement;
+        std::vector<Function *> m_ownedFunctions;
+        std::vector<ImpulseResponse *> m_ownedImpulses;
+        std::vector<Part *> m_ownedParts;
+        std::vector<Valvetrain *> m_ownedValvetrains;
 };
 
 #endif /* ATG_ENGINE_SIM_ENGINE_H */

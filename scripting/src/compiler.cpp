@@ -59,12 +59,16 @@ bool es_script::Compiler::compile(const piranha::IrPath &path) {
 }
 
 es_script::Compiler::Output es_script::Compiler::execute() {
+    // Previous outputs belong to the application. Never return stale pointers
+    // if this execution fails or does not set an engine.
+    *output() = Output{};
     const bool result = m_program.execute();
 
-    if (!result) {
-        // Todo: Runtime error
+    if (!result || output()->engine == nullptr) {
+        std::ofstream file("error_log.log", std::ios::app);
+        file << "Script execution failed or did not produce an engine. The current engine was not replaced.\n";
     }
-
+    output()->success = result && output()->engine != nullptr;
     return *output();
 }
 
@@ -74,6 +78,8 @@ void es_script::Compiler::destroy() {
 
     delete m_compiler;
     m_compiler = nullptr;
+    delete s_output;
+    s_output = nullptr;
 }
 
 void es_script::Compiler::printError(

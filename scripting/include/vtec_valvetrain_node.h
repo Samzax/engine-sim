@@ -18,6 +18,7 @@ namespace es_script {
             EngineContext *context,
             Crankshaft *crank) override {
             VtecValvetrain *valvetrain = new VtecValvetrain;
+            context->getEngine()->ownValvetrain(valvetrain);
 
             Camshaft
                 *intakeCam = new Camshaft(),

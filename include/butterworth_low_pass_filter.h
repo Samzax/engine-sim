@@ -25,7 +25,14 @@ public:
         /* void */
     }
 
-    __forceinline T_Real fast_f(T_Real sample) {
+    void reset() {
+        for (int i = 0; i < 4; ++i) {
+            m_x.overwrite(0, i);
+            m_y.overwrite(0, i);
+        }
+    }
+
+    inline T_Real fast_f(T_Real sample) {
         const T_Real y_prev[4] = {
             m_y.read(3),
             m_y.read(2),

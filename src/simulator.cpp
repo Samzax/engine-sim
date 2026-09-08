@@ -1,4 +1,5 @@
 #include "../include/simulator.h"
+#include <stdexcept>
 
 Simulator::Simulator() {
     m_engine = nullptr;
@@ -21,8 +22,7 @@ Simulator::Simulator() {
 }
 
 Simulator::~Simulator() {
-    assert(m_system == nullptr);
-    assert(m_dynoTorqueSamples == nullptr);
+    destroy();
 }
 
 void Simulator::initialize(const Parameters &params) {
@@ -62,6 +62,7 @@ void Simulator::releaseSimulation() {
 }
 
 void Simulator::startFrame(double dt) {
+    m_simulationStart = std::chrono::steady_clock::now();
     if (m_engine == nullptr) {
         m_steps = 0;
         return;
@@ -166,6 +167,19 @@ void Simulator::endFrame() {
 
 void Simulator::destroy() {
     m_synthesizer.destroy();
+    delete[] m_dynoTorqueSamples;
+    m_dynoTorqueSamples = nullptr;
+    delete m_system;
+    m_system = nullptr;
+    m_engine = nullptr;
+    m_vehicle = nullptr;
+    m_transmission = nullptr;
+    m_steps = 0;
+}
+
+void Simulator::setSimulationFrequency(int frequency) {
+    if (frequency <= 0) throw std::invalid_argument("Simulation frequency must be positive");
+    m_simulationFrequency = frequency;
 }
 
 void Simulator::startAudioRenderingThread() {

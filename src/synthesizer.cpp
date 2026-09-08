@@ -1,10 +1,10 @@
 #include "../include/synthesizer.h"
 
 #include "../include/utilities.h"
-#include "../include/delta.h"
-
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 
 #undef min
 #undef max
@@ -14,7 +14,9 @@ Synthesizer::Synthesizer() {
     m_inputChannelCount = 0;
     m_inputBufferSize = 0;
     m_inputWriteOffset = 0.0;
-    m_inputSamplesRead = 0;
+    m_pendingInputSamples = 0;
+    m_latency = 0;
+    m_processed = true;
 
     m_audioBufferSize = 0;
 
@@ -29,12 +31,17 @@ Synthesizer::Synthesizer() {
 }
 
 Synthesizer::~Synthesizer() {
-    assert(m_inputChannels == nullptr);
-    assert(m_thread == nullptr);
-    assert(m_filters == nullptr);
+    destroy();
 }
 
 void Synthesizer::initialize(const Parameters &p) {
+    if (p.inputChannelCount <= 0 || p.inputBufferSize <= 0 || p.audioBufferSize <= 0
+        || !std::isfinite(p.inputSampleRate) || p.inputSampleRate <= 0
+        || !std::isfinite(p.audioSampleRate) || p.audioSampleRate <= 0) {
+        throw std::invalid_argument("Invalid synthesizer channels, capacity or sample rate");
+    }
+    destroy();
+    m_run = true;
     m_inputChannelCount = p.inputChannelCount;
     m_inputBufferSize = p.inputBufferSize;
     m_inputWriteOffset = p.inputBufferSize;
@@ -43,7 +50,13 @@ void Synthesizer::initialize(const Parameters &p) {
     m_audioSampleRate = p.audioSampleRate;
     m_audioParameters = p.initialAudioParameters;
 
-    m_inputSamplesRead = 0;
+    m_pendingInputSamples = 0;
+    m_latency = 0;
+    m_lastInputSampleOffset = 0;
+    m_rendering = false;
+    m_levelerGain = 1.0;
+    m_levelingFilter = LevelingFilter();
+    m_antialiasing.reset();
 
     m_inputWriteOffset = 0;
     m_processed = true;
@@ -78,9 +91,7 @@ void Synthesizer::initialize(const Parameters &p) {
     m_levelingFilter.p_minLevel = m_audioParameters.levelerMinGain;
     m_antialiasing.setCutoffFrequency(m_audioSampleRate * 0.45f, m_audioSampleRate);
 
-    for (int i = 0; i < m_audioBufferSize; ++i) {
-        m_audioBuffer.write(0);
-    }
+    m_outputStaging.resize(std::min(2000, m_audioBufferSize));
 }
 
 void Synthesizer::initializeImpulseResponse(
@@ -89,8 +100,14 @@ void Synthesizer::initializeImpulseResponse(
     float volume,
     int index)
 {
+    if (index < 0 || index >= m_inputChannelCount) {
+        throw std::out_of_range("Invalid impulse response channel");
+    }
+    if (m_thread != nullptr) {
+        throw std::logic_error("Stop audio rendering before replacing an impulse response");
+    }
     unsigned int clippedLength = 0;
-    for (unsigned int i = 0; i < samples; ++i) {
+    for (unsigned int i = 0; impulseResponse != nullptr && i < samples; ++i) {
         if (std::abs(impulseResponse[i]) > 100) {
             clippedLength = i + 1;
         }
@@ -105,14 +122,19 @@ void Synthesizer::initializeImpulseResponse(
 }
 
 void Synthesizer::startAudioRenderingThread() {
+    if (m_thread != nullptr) return;
+    if (m_inputChannelCount == 0) return;
     m_run = true;
     m_thread = new std::thread(&Synthesizer::audioRenderingThread, this);
 }
 
 void Synthesizer::endAudioRenderingThread() {
     if (m_thread != nullptr) {
-        m_run = false;
-        endInputBlock();
+        {
+            std::lock_guard<std::mutex> lock(m_lock0);
+            m_run = false;
+        }
+        m_cv0.notify_all();
 
         m_thread->join();
         delete m_thread;
@@ -122,11 +144,12 @@ void Synthesizer::endAudioRenderingThread() {
 }
 
 void Synthesizer::destroy() {
+    endAudioRenderingThread();
     m_audioBuffer.destroy();
 
-    for (int i = 0; i < m_inputChannelCount; ++i) {
+    for (int i = 0; m_inputChannels != nullptr && i < m_inputChannelCount; ++i) {
         m_inputChannels[i].data.destroy();
-        m_filters[i].convolution.destroy();
+        delete[] m_inputChannels[i].transferBuffer;
     }
 
     delete[] m_inputChannels;
@@ -136,9 +159,15 @@ void Synthesizer::destroy() {
     m_filters = nullptr;
 
     m_inputChannelCount = 0;
+    m_pendingInputSamples = 0;
+    m_latency = 0;
+    m_processed = true;
+    m_rendering = false;
+    m_outputStaging.clear();
 }
 
 int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
+    if (samples <= 0) return 0;
     std::lock_guard<std::mutex> lock(m_lock0);
 
     const int newDataLength = m_audioBuffer.size();
@@ -154,6 +183,7 @@ int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
     }
     
     const int samplesConsumed = std::min(samples, newDataLength);
+    m_cv0.notify_all();
 
     return samplesConsumed;
 }
@@ -161,15 +191,15 @@ int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
 void Synthesizer::waitProcessed() {
     {
         std::unique_lock<std::mutex> lk(m_lock0);
-        m_cv0.wait(lk, [this] { return m_processed; });
+        m_cv0.wait(lk, [this] { return !m_run || m_processed; });
     }
 }
 
 void Synthesizer::writeInput(const double *data) {
-    m_inputWriteOffset += (double)m_audioSampleRate / m_inputSampleRate;
-    if (m_inputWriteOffset >= (double)m_inputBufferSize) {
-        m_inputWriteOffset -= (double)m_inputBufferSize;
-    }
+    std::lock_guard<std::mutex> lock(m_lock0);
+    if (m_inputChannelCount == 0) return;
+    m_inputWriteOffset = std::fmod(m_inputWriteOffset + (double)m_audioSampleRate / m_inputSampleRate,
+        (double)m_inputBufferSize);
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         RingBuffer<float> &buffer = m_inputChannels[i].data;
@@ -177,6 +207,7 @@ void Synthesizer::writeInput(const double *data) {
         const size_t baseIndex = buffer.writeIndex();
         const double distance =
             inputDistance(m_inputWriteOffset, m_lastInputSampleOffset);
+        if (distance <= 0) continue;
         double s =
             inputDistance(baseIndex, m_lastInputSampleOffset);
         for (; s <= distance; s += 1.0) {
@@ -185,6 +216,11 @@ void Synthesizer::writeInput(const double *data) {
             const double f = s / distance;
             const double sample = lastInputSample * (1 - f) + data[i] * f;
 
+            // RingBuffer drops its oldest sample on overflow. Keep the count of
+            // committed (renderable) samples consistent with that policy.
+            if (i == 0 && buffer.size() == buffer.capacity() && m_pendingInputSamples > 0) {
+                --m_pendingInputSamples;
+            }
             buffer.write(m_filters[i].antialiasing.fast_f(static_cast<float>(sample)));
         }
 
@@ -192,71 +228,76 @@ void Synthesizer::writeInput(const double *data) {
     }
 
     m_lastInputSampleOffset = m_inputWriteOffset;
+    m_processed = m_pendingInputSamples == 0 && !m_rendering;
 }
 
 void Synthesizer::endInputBlock() {
-    std::unique_lock<std::mutex> lk(m_inputLock); 
-
-    for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_inputChannels[i].data.removeBeginning(m_inputSamplesRead);
-    }
-
-    if (m_inputChannelCount != 0) {
-        m_latency = m_inputChannels[0].data.size();
-    }
-    
-    m_inputSamplesRead = 0;
-    m_processed = false;
+    std::unique_lock<std::mutex> lk(m_lock0);
+    m_pendingInputSamples = m_inputChannelCount == 0 ? 0 : (int)m_inputChannels[0].data.size();
+    m_latency = m_pendingInputSamples;
+    m_processed = m_pendingInputSamples == 0 && !m_rendering;
 
     lk.unlock();
-    m_cv0.notify_one();
+    m_cv0.notify_all();
 }
 
 void Synthesizer::audioRenderingThread() {
     while (m_run) {
-        renderAudio();
+        renderBlock(true);
     }
 }
 
 #undef max
 void Synthesizer::renderAudio() {
+    if (m_thread != nullptr) throw std::logic_error("Audio worker already owns rendering");
+    renderBlock(false);
+}
+
+void Synthesizer::renderBlock(bool waitForInput) {
     std::unique_lock<std::mutex> lk0(m_lock0);
 
-    m_cv0.wait(lk0, [this] {
-        const bool inputAvailable =
-            m_inputChannels[0].data.size() > 0
-            && m_audioBuffer.size() < 2000;
-        return !m_run || (inputAvailable && !m_processed);
+    m_cv0.wait(lk0, [this, waitForInput] {
+        return !m_run || !waitForInput
+            || (m_pendingInputSamples > 0 && m_audioBuffer.size() < m_outputStaging.size());
     });
+    if (!m_run || m_pendingInputSamples == 0) return;
 
     const int n = std::min(
-        std::max(0, 2000 - (int)m_audioBuffer.size()),
-        (int)m_inputChannels[0].data.size());
+        (int)m_outputStaging.size(),
+        std::min((int)(m_outputStaging.size() - m_audioBuffer.size()), m_pendingInputSamples));
+    if (n == 0) return;
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
-        m_inputChannels[i].data.read(n, m_inputChannels[i].transferBuffer);
+        m_inputChannels[i].data.readAndRemove(n, m_inputChannels[i].transferBuffer);
     }
     
-    m_inputSamplesRead = n;
-    m_processed = true;
+    m_pendingInputSamples -= n;
+    m_rendering = true;
+    const AudioParameters params = m_audioParameters;
 
     lk0.unlock();
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         m_filters[i].airNoiseLowPass.setCutoffFrequency(
-            static_cast<float>(m_audioParameters.airNoiseFrequencyCutoff), m_audioSampleRate);
-        m_filters[i].jitterFilter.setJitterScale(m_audioParameters.inputSampleNoise);
+            params.airNoiseFrequencyCutoff, m_audioSampleRate);
+        m_filters[i].jitterFilter.setJitterScale(params.inputSampleNoise);
     }
 
     for (int i = 0; i < n; ++i) {
-        m_audioBuffer.write(renderAudio(i));
+        m_outputStaging[i] = renderSample(i, params);
     }
-
-    m_cv0.notify_one();
+    lk0.lock();
+    for (int i = 0; i < n; ++i) m_audioBuffer.write(m_outputStaging[i]);
+    m_levelerGain = m_levelingFilter.getAttenuation();
+    m_rendering = false;
+    m_processed = m_pendingInputSamples == 0;
+    lk0.unlock();
+    m_cv0.notify_all();
 }
 
 double Synthesizer::getLatency() const {
-    return (double)m_latency / m_audioSampleRate;
+    std::lock_guard<std::mutex> lock(m_lock0);
+    return m_audioSampleRate > 0 ? (double)m_latency / m_audioSampleRate : 0.0;
 }
 
 int Synthesizer::inputDelta(int s1, int s0) const {
@@ -272,16 +313,22 @@ double Synthesizer::inputDistance(double s1, double s0) const {
 }
 
 void Synthesizer::setInputSampleRate(double sampleRate) {
-    if (sampleRate != m_inputSampleRate) {
-        std::lock_guard<std::mutex> lock(m_lock0);
-        m_inputSampleRate = sampleRate;
+    if (!std::isfinite(sampleRate) || sampleRate <= 0) {
+        throw std::invalid_argument("Input sample rate must be finite and positive");
     }
+    std::lock_guard<std::mutex> lock(m_lock0);
+    m_inputSampleRate = sampleRate;
 }
 
-int16_t Synthesizer::renderAudio(int inputSample) {
-    const float airNoise = m_audioParameters.airNoise;
-    const float dF_F_mix = m_audioParameters.dF_F_mix;
-    const float convAmount = m_audioParameters.convolution;
+double Synthesizer::getInputSampleRate() const {
+    std::lock_guard<std::mutex> lock(m_lock0);
+    return m_inputSampleRate;
+}
+
+int16_t Synthesizer::renderSample(int inputSample, const AudioParameters &params) {
+    const float airNoise = params.airNoise;
+    const float dF_F_mix = params.dF_F_mix;
+    const float convAmount = params.convolution;
 
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
@@ -297,14 +344,14 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
         const float noise = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
         const float r =
-            m_filters->airNoiseLowPass.fast_f(noise);
+            m_filters[i].airNoiseLowPass.fast_f(noise);
         const float r_mixed =
             airNoise * r + (1 - airNoise);
 
         float v_in =
             f_p * dF_F_mix
             + f * r_mixed * (1 - dF_F_mix);
-        if (fpclassify(v_in) == FP_SUBNORMAL) {
+        if (std::fpclassify(v_in) == FP_SUBNORMAL) {
             v_in = 0;
         }
 
@@ -317,9 +364,12 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     signal = m_antialiasing.fast_f(signal);
 
-    m_levelingFilter.p_target = m_audioParameters.levelerTarget;
-    const float v_leveled = m_levelingFilter.f(signal) * m_audioParameters.volume;
-    int r_int = std::lround(v_leveled);
+    m_levelingFilter.p_target = params.levelerTarget;
+    m_levelingFilter.p_minLevel = params.levelerMinGain;
+    m_levelingFilter.p_maxLevel = params.levelerMaxGain;
+    const float v_leveled = m_levelingFilter.f(signal) * params.volume;
+    if (!std::isfinite(v_leveled)) return 0;
+    int r_int = std::lround(clamp(v_leveled, (float)INT16_MIN, (float)INT16_MAX));
     if (r_int > INT16_MAX) {
         r_int = INT16_MAX;
     }
@@ -332,7 +382,7 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
 double Synthesizer::getLevelerGain() {
     std::lock_guard<std::mutex> lock(m_lock0);
-    return m_levelingFilter.getAttenuation();
+    return m_levelerGain;
 }
 
 Synthesizer::AudioParameters Synthesizer::getAudioParameters() {

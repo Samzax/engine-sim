@@ -14,6 +14,7 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <vector>
 
 class Synthesizer {
     public:
@@ -84,9 +85,7 @@ class Synthesizer {
         double inputDistance(double s1, double s0) const;
 
         void setInputSampleRate(double sampleRate);
-        double getInputSampleRate() const { return m_inputSampleRate; }
-
-        int16_t renderAudio(int inputOffset);
+        double getInputSampleRate() const;
 
         double getLevelerGain();
         AudioParameters getAudioParameters();
@@ -99,7 +98,7 @@ class Synthesizer {
         AudioParameters m_audioParameters;
         int m_inputChannelCount;
         int m_inputBufferSize;
-        int m_inputSamplesRead;
+        int m_pendingInputSamples;
         int m_latency;
         double m_inputWriteOffset;
         double m_lastInputSampleOffset;
@@ -114,11 +113,19 @@ class Synthesizer {
         std::atomic<bool> m_run;
         bool m_processed;
 
-        std::mutex m_inputLock;
-        std::mutex m_lock0;
+        mutable std::mutex m_lock0;
         std::condition_variable m_cv0;
 
         ProcessingFilters *m_filters;
+
+    private:
+        // Only the rendering thread uses DSP state and the staging buffers.
+        // The mutex protects input/output queues, block publication and settings.
+        int16_t renderSample(int inputOffset, const AudioParameters &params);
+        void renderBlock(bool waitForInput);
+        bool m_rendering = false;
+        double m_levelerGain = 1.0;
+        std::vector<int16_t> m_outputStaging;
 };
 
 #endif /* ATG_ENGINE_SIM_ENGINE_SYNTHESIZER_H */

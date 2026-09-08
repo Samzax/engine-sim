@@ -42,7 +42,7 @@ class EngineSimApplication {
         void run();
         void destroy();
 
-        void loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);
+        bool loadEngine(Engine *engine, Vehicle *vehicle, Transmission *transmission);
         void drawGenerated(
                 const GeometryGenerator::GeometryIndices &indices,
                 int layer = 0);
@@ -179,6 +179,7 @@ class EngineSimApplication {
 
         ysAudioBuffer *m_outputAudioBuffer;
         AudioBuffer m_audioBuffer;
+        std::vector<int16_t> m_audioScratch;
         ysAudioSource *m_audioSource;
 
         int m_oscillatorSampleOffset;

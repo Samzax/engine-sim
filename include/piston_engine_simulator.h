@@ -28,6 +28,7 @@ class PistonEngineSimulator : public Simulator {
         virtual double getTotalExhaustFlow() const;
         void endFrame();
         virtual void destroy() override;
+        void setSimulationFrequency(int frequency) override;
 
         void setFluidSimulationSteps(int steps) { m_fluidSimulationSteps = steps; }
         int getFluidSimulationSteps() const { return m_fluidSimulationSteps; }

@@ -8,7 +8,7 @@ JitterFilter::JitterFilter() {
 }
 
 JitterFilter::~JitterFilter() {
-    /* void */
+    delete[] m_history;
 }
 
 void JitterFilter::initialize(
@@ -18,6 +18,7 @@ void JitterFilter::initialize(
 {
     m_maxJitter = maxJitter;
 
+    delete[] m_history;
     m_history = new float[maxJitter];
     m_offset = 0;
     memset(m_history, 0, sizeof(float) * maxJitter);

@@ -1,13 +1,15 @@
-#include "..\include\engine.h"
 #include "../include/engine.h"
 
 #include "../include/constants.h"
 #include "../include/units.h"
 #include "../include/fuel.h"
 #include "../include/piston_engine_simulator.h"
+#include "../include/valvetrain.h"
 
 #include <cmath>
 #include <assert.h>
+#include <vector>
+#include <memory>
 
 Engine::Engine() {
     m_name = "";
@@ -91,6 +93,7 @@ void Engine::initialize(const Parameters &params) {
 }
 
 void Engine::destroy() {
+    for (int i = 0; i < m_cylinderBankCount; ++i) m_heads[i].destroy();
     for (int i = 0; i < m_crankshaftCount; ++i) {
         m_crankshafts[i].destroy();
     }
@@ -130,6 +133,16 @@ void Engine::destroy() {
     m_intakes = nullptr;
     m_combustionChambers = nullptr;
     m_throttle = nullptr;
+    for (auto *value : m_ownedValvetrains) delete value;
+    for (auto *value : m_ownedParts) { value->destroy(); delete value; }
+    for (auto *value : m_ownedFunctions) { value->destroy(); delete value; }
+    for (auto *value : m_ownedImpulses) delete value;
+    m_ownedValvetrains.clear();
+    m_ownedParts.clear();
+    m_ownedFunctions.clear();
+    m_ownedImpulses.clear();
+    m_crankshaftCount = m_cylinderBankCount = m_cylinderCount = 0;
+    m_exhaustSystemCount = m_intakeCount = 0;
 }
 
 Crankshaft *Engine::getOutputCrankshaft() const {
@@ -237,8 +250,8 @@ void Engine::calculateDisplacement() {
     // numerical approximation.
     constexpr int Resolution = 1000;
 
-    double *min_s = new double[m_cylinderCount];
-    double *max_s = new double[m_cylinderCount];
+    std::vector<double> min_s(m_cylinderCount);
+    std::vector<double> max_s(m_cylinderCount);
 
     for (int i = 0; i < m_cylinderCount; ++i) {
         min_s[i] = DBL_MAX;
@@ -384,15 +397,16 @@ int Engine::getMaxDepth() const {
 }
 
 Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission) {
-    PistonEngineSimulator *simulator = new PistonEngineSimulator;
+    auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;
     simulator->initialize(simulatorParams);
+    simulator->setSimulationFrequency(getSimulationFrequency());
 
     simulator->loadSimulation(this, vehicle, transmission);
     simulator->setFluidSimulationSteps(8);
 
-    return static_cast<Simulator *>(simulator);
+    return simulator.release();
 }
 
 double Engine::getRpm() const {

@@ -12,11 +12,13 @@ ConvolutionFilter::ConvolutionFilter() {
 }
 
 ConvolutionFilter::~ConvolutionFilter() {
-    assert(m_shiftRegister == nullptr);
-    assert(m_impulseResponse == nullptr);
+    destroy();
 }
 
 void ConvolutionFilter::initialize(int samples) {
+    destroy();
+    // Empty/missing responses use the dry signal, including before initialization.
+    if (samples <= 0) return;
     m_sampleCount = samples;
     m_shiftOffset = 0;
     m_shiftRegister = new float[samples];
@@ -32,9 +34,12 @@ void ConvolutionFilter::destroy() {
 
     m_shiftRegister = nullptr;
     m_impulseResponse = nullptr;
+    m_sampleCount = 0;
+    m_shiftOffset = 0;
 }
 
 float ConvolutionFilter::f(float sample) {
+    if (m_sampleCount == 0) return sample;
     m_shiftRegister[m_shiftOffset] = sample;
 
     float result = 0;

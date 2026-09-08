@@ -23,6 +23,7 @@ namespace es_script {
             Crankshaft *crankshaft,
             EngineContext *context) const
         {
+            context->getEngine()->ownPart(camshaft);
             Camshaft::Parameters parameters = m_parameters;
             parameters.crankshaft = crankshaft;
             parameters.lobes = (int)m_lobes.size();

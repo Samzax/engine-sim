@@ -27,13 +27,7 @@ PistonEngineSimulator::PistonEngineSimulator() {
 }
 
 PistonEngineSimulator::~PistonEngineSimulator() {
-    assert(m_crankConstraints == nullptr);
-    assert(m_cylinderWallConstraints == nullptr);
-    assert(m_linkConstraints == nullptr);
-    assert(m_crankshaftFrictionConstraints == nullptr);
-    assert(m_exhaustFlowStagingBuffer == nullptr);
-    assert(m_delayFilters == nullptr);
-    assert(m_antialiasingFilters == nullptr);
+    destroy();
 }
 
 void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Transmission *transmission) {
@@ -223,7 +217,7 @@ void PistonEngineSimulator::placeAndInitialize() {
             + exhaust->getLength();
         const double speedOfSound = 343.0 * units::m / units::sec;
         const double delay = exhaustLength / speedOfSound;
-        m_delayFilters[i].initialize(delay, 10000.0);
+        m_delayFilters[i].initialize(delay, getSimulationFrequency());
     }
 
     m_engine->getIgnitionModule()->reset();
@@ -339,17 +333,21 @@ void PistonEngineSimulator::endFrame() {
     const double frameTimestep = simulationSteps() * getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
     for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
-        m_engine->getIntake(i)->m_flowRate /= frameTimestep;
+        m_engine->getIntake(i)->m_flowRate = frameTimestep > 0
+            ? m_engine->getIntake(i)->m_flowRate / frameTimestep : 0.0;
     }
 }
 
 void PistonEngineSimulator::destroy() {
+    endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 
     if (m_crankConstraints != nullptr) delete[] m_crankConstraints;
     if (m_cylinderWallConstraints != nullptr) delete[] m_cylinderWallConstraints;
     if (m_linkConstraints != nullptr) delete[] m_linkConstraints;
     if (m_crankshaftFrictionConstraints != nullptr) delete[] m_crankshaftFrictionConstraints;
+    delete[] m_crankshaftLinks;
+    m_crankshaftLinks = nullptr;
     if (m_exhaustFlowStagingBuffer != nullptr) delete[] m_exhaustFlowStagingBuffer;
     if (m_system != nullptr) delete m_system;
     if (m_delayFilters != nullptr) delete[] m_delayFilters;
@@ -365,6 +363,16 @@ void PistonEngineSimulator::destroy() {
     m_transmission = nullptr;
     m_engine = nullptr;
     m_delayFilters = nullptr;
+    Simulator::destroy();
+}
+
+void PistonEngineSimulator::setSimulationFrequency(int frequency) {
+    Simulator::setSimulationFrequency(frequency);
+    if (m_delayFilters != nullptr && m_engine != nullptr) {
+        for (int i = 0; i < m_engine->getCylinderCount(); ++i) {
+            m_delayFilters[i].setSampleRate(frequency);
+        }
+    }
 }
 
 void PistonEngineSimulator::writeToSynthesizer() {
@@ -375,8 +383,6 @@ void PistonEngineSimulator::writeToSynthesizer() {
 
     const double attenuation = std::min(std::abs(filteredEngineSpeed()), 40.0) / 40.0;
     const double attenuation_3 = attenuation * attenuation * attenuation;
-
-    static double lastValveLift[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     const double timestep = getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
@@ -396,8 +402,6 @@ void PistonEngineSimulator::writeToSynthesizer() {
                 1.0 * (chamber->m_exhaustRunnerAndPrimary.pressure() - units::pressure(1.0, units::atm))
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(1.0, 0.0)
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(-1.0, 0.0));
-
-        lastValveLift[i] = head->exhaustValveLift(piston->getCylinderIndex());
 
         const double delayedExhaustPulse =
             m_delayFilters[i].fast_f(exhaustFlow);
