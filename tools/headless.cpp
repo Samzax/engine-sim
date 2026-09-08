@@ -125,7 +125,9 @@ int main(int argc, char **argv) {
             const auto *response = out.engine->getExhaustSystem(i)->getImpulseResponse();
             std::vector<int16_t> impulse;
             if (!response || !readImpulseWave(response->getFilename(), 44100, impulse)) {
-                std::cerr << "Channel " << i << ": dry audio (missing/unsupported impulse)\n";
+                std::cerr << "Channel " << i << ": dry audio; impulse response "
+                    << (response ? response->getFilename() : "<not configured>")
+                    << " is missing or unsupported. Expected mono PCM16 at 44100 Hz.\n";
             }
             audio.initializeImpulseResponse(impulse.data(), static_cast<unsigned>(impulse.size()),
                 response ? static_cast<float>(response->getVolume()) : 1.0f, i);

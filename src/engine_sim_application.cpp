@@ -666,7 +666,9 @@ bool EngineSimApplication::loadEngine(
                 response != nullptr ? response->getVolume() : 1.0f, i);
             if (!loaded) {
                 std::ofstream log("error_log.log", std::ios::app);
-                log << "Using dry audio: missing or unsupported mono PCM16 44100 Hz impulse response.\n";
+                log << "Exhaust channel " << i << ": using dry audio; impulse response "
+                    << (response != nullptr ? response->getFilename() : "<not configured>")
+                    << " is missing or unsupported. Expected mono PCM16 at 44100 Hz.\n";
             }
         }
 
