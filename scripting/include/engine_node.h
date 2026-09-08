@@ -29,6 +29,8 @@ namespace es_script {
             if (m_fuel == nullptr || m_throttle == nullptr)
                 return "Engine requires fuel and throttle definitions";
             const std::set<CrankshaftNode *> crankshafts(m_crankshafts.begin(), m_crankshafts.end());
+            if (crankshafts.size() != m_crankshafts.size())
+                return "Engine cannot attach the same crankshaft instance more than once";
             std::map<ConnectingRodNode *, const RodJournalNode *> rods;
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 if (bank->getCylinderCount() == 0) return "Cylinder bank requires at least one cylinder";
