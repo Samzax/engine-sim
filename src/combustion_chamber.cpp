@@ -10,6 +10,7 @@
 #include "../include/engine.h"
 
 #include <cmath>
+#include <stdexcept>
 
 CombustionChamber::CombustionChamber() {
     m_crankcasePressure = 0.0;
@@ -266,7 +267,36 @@ void CombustionChamber::flow(double dt) {
     }
 }
 
-void CombustionChamber::flowStep(double dt, bool deferPipes) {
+void CombustionChamber::flowIntakeReservoir(double dt) {
+    Intake *intake=m_head->getIntake(m_piston->getCylinderIndex());
+    GasSystem *endpoint=m_intakePipe.active() ? &m_intakePipe.first() : &m_intakeRunnerAndManifold;
+    GasSystem::FlowParameters params{m_manifoldToRunnerFlowRate,dt,1,0,
+        intake->getPlenumCrossSectionArea(),m_head->getIntakeRunnerCrossSectionArea(),
+        &intake->m_system,endpoint};
+    GasSystem::flow(params);
+}
+
+void CombustionChamber::flowExhaustReservoir(double dt) {
+    ExhaustSystem *exhaust=m_head->getExhaustSystem(m_piston->getCylinderIndex());
+    GasSystem *endpoint=m_exhaustPipe.active() ? &m_exhaustPipe.last() : &m_exhaustRunnerAndPrimary;
+    GasSystem::FlowParameters params{m_primaryToCollectorFlowRate,dt,1,0,
+        m_head->getExhaustRunnerCrossSectionArea(),exhaust->getCollectorCrossSectionArea(),
+        endpoint,exhaust->getSystem()};
+    GasSystem::flow(params);
+}
+
+void CombustionChamber::flowReservoirPorts(double dt) {
+    if(!supportsSeparatedPorts()) throw std::logic_error("Separated ports require distributed intake and exhaust pipes");
+    flowIntakeReservoir(dt);
+    flowExhaustReservoir(dt);
+}
+
+void CombustionChamber::flowCylinderPorts(double dt) {
+    if(!supportsSeparatedPorts()) throw std::logic_error("Separated ports require distributed intake and exhaust pipes");
+    flowStep(dt,true,true);
+}
+
+void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPortsDone) {
     if (m_system.temperature() > m_peakTemperature) {
         m_peakTemperature = m_system.temperature();
     }
@@ -282,24 +312,15 @@ void CombustionChamber::flowStep(double dt, bool deferPipes) {
 
     Intake *intake = m_head->getIntake(m_piston->getCylinderIndex());
     ExhaustSystem *exhaust = m_head->getExhaustSystem(m_piston->getCylinderIndex());
-    GasSystem *intakeIn=m_intakePipe.active() ? &m_intakePipe.first() : &m_intakeRunnerAndManifold;
     GasSystem *intakeOut=m_intakePipe.active() ? &m_intakePipe.last() : &m_intakeRunnerAndManifold;
     GasSystem *exhaustIn=m_exhaustPipe.active() ? &m_exhaustPipe.first() : &m_exhaustRunnerAndPrimary;
-    GasSystem *exhaustOut=m_exhaustPipe.active() ? &m_exhaustPipe.last() : &m_exhaustRunnerAndPrimary;
 
     const double start_n = m_system.n();
 
     GasSystem::FlowParameters flowParams;
     flowParams.dt = dt;
 
-    flowParams.k_flow = m_manifoldToRunnerFlowRate;
-    flowParams.crossSectionArea_0 = intake->getPlenumCrossSectionArea();
-    flowParams.crossSectionArea_1 = m_head->getIntakeRunnerCrossSectionArea();
-    flowParams.direction_x = 1.0;
-    flowParams.direction_y = 0.0;
-    flowParams.system_0 = &intake->m_system;
-    flowParams.system_1 = intakeIn;
-    GasSystem::flow(flowParams);
+    if (!reservoirPortsDone) flowIntakeReservoir(dt);
 
     if (!m_intakePipe.active()) m_intakeRunnerAndManifold.dissipateExcessVelocity();
 
@@ -327,14 +348,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes) {
     m_system.dissipateExcessVelocity();
     if (!m_exhaustPipe.active()) m_exhaustRunnerAndPrimary.dissipateExcessVelocity();
 
-    flowParams.k_flow = m_primaryToCollectorFlowRate;
-    flowParams.crossSectionArea_0 = m_head->getExhaustRunnerCrossSectionArea();
-    flowParams.crossSectionArea_1 = exhaust->getCollectorCrossSectionArea();
-    flowParams.direction_x = 1.0;
-    flowParams.direction_y = 0.0;
-    flowParams.system_0 = exhaustOut;
-    flowParams.system_1 = exhaust->getSystem();
-    GasSystem::flow(flowParams);
+    if (!reservoirPortsDone) flowExhaustReservoir(dt);
 
     if (!deferPipes) GasPipe::advancePair(m_intakePipe, m_exhaustPipe, dt);
     if (m_intakePipe.active()) {

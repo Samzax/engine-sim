@@ -78,6 +78,11 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void update(double dt);
         void flow(double dt);
         void flowPorts(double dt) { flowStep(dt,true); }
+        // Run reservoir stages in cylinder order, then cylinder stages, then
+        // pipe interiors. Distinct pipe endpoints make the stages independent.
+        bool supportsSeparatedPorts() const { return m_intakePipe.active() && m_exhaustPipe.active(); }
+        void flowReservoirPorts(double dt);
+        void flowCylinderPorts(double dt);
         GasPipe *intakePipe() { return &m_intakePipe; }
         GasPipe *exhaustPipe() { return &m_exhaustPipe; }
         void aggregatePipes() {
@@ -155,7 +160,9 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         bool m_dynamicCombustion = true;
         LubricationModel m_lubrication;
         GasPipe m_intakePipe, m_exhaustPipe;
-        void flowStep(double dt, bool deferPipes=false);
+        void flowStep(double dt, bool deferPipes=false, bool reservoirPortsDone=false);
+        void flowIntakeReservoir(double dt);
+        void flowExhaustReservoir(double dt);
 };
 
 #endif /* ATG_ENGINE_SIM_COMBUSTION_CHAMBER_H */

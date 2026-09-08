@@ -317,12 +317,14 @@ void PistonEngineSimulator::simulateStep_() {
     im->update(timestep);
 
     const int cylinderCount = m_engine->getCylinderCount();
+    bool separatedPorts=!m_pipes.empty();
     for (int i = 0; i < cylinderCount; ++i) {
         if (im->getIgnitionEvent(i)) {
             m_engine->getChamber(i)->ignite();
         }
 
         m_engine->getChamber(i)->update(timestep);
+        separatedPorts=separatedPorts && m_engine->getChamber(i)->supportsSeparatedPorts();
     }
 
     for (int i = 0; i < cylinderCount; ++i) {
@@ -360,7 +362,15 @@ void PistonEngineSimulator::simulateStep_() {
                 }
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Ports);
-                    for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
+                    if(separatedPorts) {
+                        // Shared plenums/collectors retain cylinder order. Their
+                        // pipe endpoints are distinct from the cylinder ends,
+                        // so cylinder work can follow as an independent phase.
+                        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowReservoirPorts(h);
+                        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowCylinderPorts(h);
+                    } else {
+                        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
+                    }
                 }
                 GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
                 remaining-=h;

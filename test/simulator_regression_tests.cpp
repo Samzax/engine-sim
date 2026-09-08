@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <fstream>
 #include <iterator>
+#include <cstdlib>
+#include <vector>
 
 namespace {
 struct EngineOwner {
@@ -278,6 +280,85 @@ TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
         simulator->destroy();
         simulator->destroy();
         EXPECT_EQ(simulator->getEngine(), nullptr);
+    }
+}
+
+TEST(SimulatorRegression, SeparatedPortsPreserveSharedReservoirAndCylinderEvolution) {
+    CombustionChamber lumped;
+    EXPECT_FALSE(lumped.supportsSeparatedPorts());
+    EXPECT_THROW(lumped.flowReservoirPorts(1e-5),std::logic_error);
+    EXPECT_THROW(lumped.flowCylinderPorts(1e-5),std::logic_error);
+    for(const char *path : {"test/scripts/hayabusa.mr","test/scripts/ferrari_v12.mr"}) {
+        for(int cells : {2,8,64}) {
+            SCOPED_TRACE(std::string(path)+" cells="+std::to_string(cells));
+            EngineOwner owners[2];
+            std::unique_ptr<Simulator> simulators[2];
+            std::vector<GasPipe *> pipes[2];
+            for(int variant=0;variant<2;++variant) {
+                es_script::Compiler compiler;
+                compiler.initialize(std::string(ENGINE_SIM_TEST_SOURCE_DIR)+"/es");
+                ASSERT_TRUE(compiler.compile(std::string(ENGINE_SIM_TEST_SOURCE_DIR)+"/"+path));
+                owners[variant].output=compiler.execute();
+                compiler.destroy();
+                auto &out=owners[variant].output;
+                ASSERT_TRUE(out.success);
+                simulators[variant].reset(out.engine->createSimulator(out.vehicle,out.transmission));
+                std::srand(17);
+                for(int j=0;j<out.engine->getCylinderCount();++j) {
+                    auto *chamber=out.engine->getChamber(j);
+                    chamber->update(1e-5);
+                    chamber->m_system.initialize(2e5+j*10000,chamber->getVolume(),900,{.015,.795,.19});
+                    for(auto *pipe : {chamber->intakePipe(),chamber->exhaustPipe()}) {
+                        auto prototype=pipe->cell(0);
+                        prototype.setVolume(.001);
+                        pipe->initialize(prototype,1,.001,cells);
+                        for(int k=0;k<cells;++k)
+                            pipe->cell(k).initialize(1e5+(j+k)%3*8e4,.001/cells,300+10*k,{.015,.795,.19});
+                        pipes[variant].push_back(pipe);
+                    }
+                    chamber->ignite();
+                }
+            }
+            const auto compareGas=[](const GasSystem &a,const GasSystem &b) {
+                EXPECT_EQ(a.n(),b.n()); EXPECT_EQ(a.kineticEnergy(),b.kineticEnergy());
+                EXPECT_EQ(a.volume(),b.volume());
+                EXPECT_EQ(a.velocity_x(),b.velocity_x()); EXPECT_EQ(a.velocity_y(),b.velocity_y());
+                EXPECT_EQ(a.mix().p_fuel,b.mix().p_fuel); EXPECT_EQ(a.mix().p_o2,b.mix().p_o2);
+                EXPECT_EQ(a.mix().p_inert,b.mix().p_inert); EXPECT_EQ(a.mix().p_co2,b.mix().p_co2);
+                EXPECT_EQ(a.mix().p_h2o,b.mix().p_h2o); EXPECT_EQ(a.mix().residualFraction,b.mix().residualFraction);
+            };
+            auto *reference=owners[0].output.engine,*separated=owners[1].output.engine;
+            for(int step=0;step<20;++step) {
+                SCOPED_TRACE(step);
+                constexpr double dt=1e-7;
+                for(int j=0;j<reference->getCylinderCount();++j) reference->getChamber(j)->flowPorts(dt);
+                for(int j=0;j<separated->getCylinderCount();++j) separated->getChamber(j)->flowReservoirPorts(dt);
+                for(int j=0;j<separated->getCylinderCount();++j) separated->getChamber(j)->flowCylinderPorts(dt);
+                for(int variant=0;variant<2;++variant)
+                    GasPipe::advanceBatch(pipes[variant].data(),static_cast<int>(pipes[variant].size()),dt);
+                for(int j=0;j<reference->getCylinderCount();++j) {
+                    auto *a=reference->getChamber(j),*b=separated->getChamber(j);
+                    compareGas(a->m_system,b->m_system);
+                    EXPECT_EQ(a->getWallTemperature(),b->getWallTemperature());
+                    EXPECT_EQ(a->getCoolantEnergy(),b->getCoolantEnergy());
+                    EXPECT_EQ(a->getLastTimestepIntakeFlow(),b->getLastTimestepIntakeFlow());
+                    EXPECT_EQ(a->getLastTimestepExhaustFlow(),b->getLastTimestepExhaustFlow());
+                    EXPECT_EQ(a->isLit(),b->isLit());
+                    EXPECT_EQ(a->m_flameEvent.lit_n,b->m_flameEvent.lit_n);
+                    EXPECT_EQ(a->m_flameEvent.percentageLit,b->m_flameEvent.percentageLit);
+                    // Reservoir array order can differ between separately
+                    // compiled engines; compare the actual port connections.
+                    compareGas(a->getCylinderHead()->getIntake(a->getPiston()->getCylinderIndex())->m_system,
+                        b->getCylinderHead()->getIntake(b->getPiston()->getCylinderIndex())->m_system);
+                    compareGas(*a->getCylinderHead()->getExhaustSystem(a->getPiston()->getCylinderIndex())->getSystem(),
+                        *b->getCylinderHead()->getExhaustSystem(b->getPiston()->getCylinderIndex())->getSystem());
+                    for(int k=0;k<cells;++k) {
+                        compareGas(a->intakePipe()->cell(k),b->intakePipe()->cell(k));
+                        compareGas(a->exhaustPipe()->cell(k),b->exhaustPipe()->cell(k));
+                    }
+                }
+            }
+        }
     }
 }
 

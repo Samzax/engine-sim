@@ -42,6 +42,25 @@ only active cells and reuses records rather than zeroing 64 slots on every call.
 Runner summaries for audio/readouts are calculated once per mechanical step;
 all physical cells still advance on every fluid step.
 
+When every cylinder has distributed intake and exhaust pipes, port work now has
+two CPU stages. First, reservoir-to-pipe exchanges run in cylinder order for
+shared plenums and collectors. Then each cylinder performs its heat transfer,
+blowby, valve exchange, velocity update and combustion. These stages touch
+distinct ends of each pipe; pipe interiors advance after both stages. Engines
+with any lumped pipe retain the original interleaved order. This separation is
+preparation for moving more coupled work onto the GPU, not an additional GPU
+backend or a demonstrated speedup by itself.
+
+`SimulatorRegression.SeparatedPortsPreserveSharedReservoirAndCylinderEvolution`
+compares the original and separated ordering for Hayabusa and V12 engines with
+2, 8 and 64 cells per pipe. Across 20 substeps with pressure/composition gradients
+and ignition, it checks exact gas-state, thermal, flame-progress and flow-total
+agreement, including shared reservoirs matched by their cylinder connections.
+It passes with both CPU and CUDA pipe interiors. Three alternating full-engine
+runs per build/backend retained printed physical metrics; median runtime changes
+were within 1.4%. A separate lumped-pipe smoke check retained printed physical
+metrics. These checks validate the reordering, not real-time performance.
+
 The GPU also returns a conservative bound for the next coupling timestep. Global
 lower bounds on each species' heat capacity give an upper bound on sound speed
 without repeating temperature inversion on the CPU. The solver still computes
@@ -200,7 +219,7 @@ intervals, including their endpoint extensions. Independent species-energy sums
 check the CPU mixture cache across composition changes and temperature boundaries.
 These establish implementation agreement, not agreement with a measured engine.
 
-The selected CPU regression run passed 55 checks, with the CUDA-only comparison
+The selected CPU regression run passed 56 checks, with the CUDA-only comparison
 skipped there and run separately with CUDA enabled. A CPU-only configuration
 also builds without the CUDA toolkit dependency. Both Hayabusa and Ferrari V12
 completed one simulated second on both backends with a half-second starter and
