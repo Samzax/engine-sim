@@ -28,9 +28,24 @@ namespace es_script {
             if (m_ignitionModule == nullptr) return "Engine requires an ignition module";
             if (m_fuel == nullptr || m_throttle == nullptr)
                 return "Engine requires fuel and throttle definitions";
+            const std::set<CrankshaftNode *> crankshafts(m_crankshafts.begin(), m_crankshafts.end());
+            std::set<ConnectingRodNode *> rods;
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 if (bank->getCylinderCount() == 0) return "Cylinder bank requires at least one cylinder";
                 if (bank->getCylinderHead() == nullptr) return "Cylinder bank requires a cylinder head";
+                for (int i = 0; i < bank->getCylinderCount(); ++i) rods.insert(bank->getCylinder(i).rod);
+            }
+            for (const CylinderBankNode *bank : m_cylinderBanks) {
+                for (int i = 0; i < bank->getCylinderCount(); ++i) {
+                    const RodJournalNode *journal = bank->getCylinder(i).rodJournal;
+                    const bool hasCrankshaft = journal->getCrankshaft() != nullptr;
+                    const bool hasMasterRod = journal->getRod() != nullptr;
+                    if (hasCrankshaft == hasMasterRod
+                        || (hasCrankshaft && crankshafts.count(journal->getCrankshaft()) == 0)
+                        || (hasMasterRod && rods.count(journal->getRod()) == 0)) {
+                        return "Cylinder rod journal must belong to a crankshaft or master rod in this engine";
+                    }
+                }
             }
             return {};
         }
