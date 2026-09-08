@@ -9,6 +9,15 @@ in the simulator to reload it. Failed reloads leave the current engine running.
 If the initial script fails, the status instead says no engine is loaded.
 Details are written to `error_log.log` in the working directory.
 
+Press A to enable ignition, then hold S to crank the engine and release S after
+it starts. Hold Q, W, E, or R for 1%, 10%, 20%, or 100% speed-control input.
+Different engines may need different cranking times and input settings. For
+fine adjustment, hold Space and scroll; keep Space held to retain that setting.
+Without Space or a preset key held, the input returns to zero. The engine
+script's throttle curve or governor maps this input to throttle opening.
+Hold Z and scroll to adjust volume. Press A again to disable ignition, or
+Escape to exit.
+
 Press Up Arrow or Down Arrow to shift gears. Opposing shift presses received
 in the same frame cancel each other, without queuing a shift for the next frame.
 
