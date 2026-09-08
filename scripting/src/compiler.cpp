@@ -67,6 +67,7 @@ es_script::Compiler::Output es_script::Compiler::execute() {
 
     if (!result || output()->engine == nullptr) {
         std::ofstream file("error_log.log", std::ios::app);
+        if (!result) file << "Script runtime error: " << m_program.getRuntimeError() << '\n';
         file << "Script execution failed or did not produce an engine. The current engine was not replaced.\n";
     }
     output()->success = result && output()->engine != nullptr;

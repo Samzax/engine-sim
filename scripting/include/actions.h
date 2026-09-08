@@ -201,7 +201,9 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
-            m_function->addSample(m_x, m_y);
+            if (!m_function->addSample(m_x, m_y)) {
+                throwError("Function samples must have finite coordinates and values");
+            }
         }
 
     protected:
@@ -447,15 +449,20 @@ namespace es_script {
             const double step = extents / (m_steps - 5.0);
             for (int i = 0; i < m_steps; ++i) {
                 if (i == 0) {
-                    m_function->addSample(0.0, m_lift);
+                    if (!m_function->addSample(0.0, m_lift)) {
+                        throwError("Harmonic cam lobe produced a non-finite sample");
+                        return;
+                    }
                 }
                 else {
                     const double x = i * step;
                     const double lift = (x >= extents)
                         ? 0.0
                         : m_lift * std::pow(0.5 + 0.5 * std::cos(k * x), m_gamma);
-                    m_function->addSample(x, lift);
-                    m_function->addSample(-x, lift);
+                    if (!m_function->addSample(x, lift) || !m_function->addSample(-x, lift)) {
+                        throwError("Harmonic cam lobe produced a non-finite sample");
+                        return;
+                    }
                 }
             }
 

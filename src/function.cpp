@@ -76,6 +76,9 @@ void Function::destroy() {
 }
 
 void Function::addSample(double x, double y) {
+    if (!std::isfinite(x) || !std::isfinite(y)) {
+        throw std::invalid_argument("Function samples must have finite coordinates and values");
+    }
     if (m_size + 1 > m_capacity) {
         resize(m_capacity * 2 + 1);
     }
@@ -210,6 +213,7 @@ double Function::triangle(double x) const {
 }
 
 int Function::closestSample(double x) const {
+    if (m_size == 0) return -1;
     if (std::isnan(x)) {
         return 0;
     }
@@ -217,8 +221,7 @@ int Function::closestSample(double x) const {
     int l = 0;
     int r = m_size - 1;
 
-    if (m_size == 0) return -1;
-    else if (x <= m_x[l]) return l;
+    if (x <= m_x[l]) return l;
     else if (x >= m_x[r]) return r;
 
     while (l + 1 < r) {

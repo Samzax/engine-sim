@@ -1,0 +1,6 @@
+import "../../assets/engines/atg-video-1/04_hayabusa.mr"
+import "engine_sim.mr"
+
+function invalid_curve(1.0)
+invalid_curve.add_sample(0.0 / 0.0, 1.0)
+main()

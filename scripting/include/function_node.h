@@ -7,6 +7,8 @@
 
 #include "engine_sim.h"
 
+#include <cmath>
+
 namespace es_script {
 
     class FunctionNode : public ObjectReferenceNode<FunctionNode> {
@@ -19,8 +21,10 @@ namespace es_script {
         FunctionNode() { /* void */ }
         virtual ~FunctionNode() { /* void */ }
 
-        void addSample(double x, double y) {
+        bool addSample(double x, double y) {
+            if (!std::isfinite(x) || !std::isfinite(y)) return false;
             m_samples.push_back({ x, y });
+            return true;
         }
 
         void setFilterRadius(double filterRadius) {

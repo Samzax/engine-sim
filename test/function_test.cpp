@@ -5,6 +5,30 @@
 #include <stdlib.h>
 #include <cmath>
 #include <stdexcept>
+#include <limits>
+
+TEST(FunctionTests, InvalidSamplesPreserveCurve) {
+    Function f;
+    f.initialize(0, 1.0);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(f.closestSample(nan), -1);
+    for (double invalid : {nan, std::numeric_limits<double>::infinity(),
+            -std::numeric_limits<double>::infinity()}) {
+        EXPECT_THROW(f.addSample(invalid, 1), std::invalid_argument);
+        EXPECT_THROW(f.addSample(0, invalid), std::invalid_argument);
+    }
+    EXPECT_EQ(f.closestSample(0), -1);
+    f.addSample(0, 2);
+    f.addSample(1, 4);
+    EXPECT_THROW(f.addSample(0.5, nan), std::invalid_argument);
+    EXPECT_THROW(f.addSample(nan, 100), std::invalid_argument);
+    EXPECT_DOUBLE_EQ(f.sampleTriangle(0.5), 3);
+    double low, high;
+    f.getRange(&low, &high);
+    EXPECT_DOUBLE_EQ(low, 2);
+    EXPECT_DOUBLE_EQ(high, 4);
+    f.destroy();
+}
 
 TEST(FunctionTests, ReinitializeSmallerCurve) {
     Function f;
