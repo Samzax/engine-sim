@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
         }
         simulator->setTargetSynthesizerLatency(0);
         out.engine->getIgnitionModule()->m_enabled = true;
-        out.engine->setThrottle(throttle);
+        out.engine->setSpeedControl(throttle);
         WaveOutput wave(argc > 6 ? argv[6] : nullptr);
         double simulated = 0, energy = 0;
         uint64_t samples = 0, clipped = 0;

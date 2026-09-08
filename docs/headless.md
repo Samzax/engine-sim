@@ -15,6 +15,14 @@ optional starter duration (default 1 second, or the full run if shorter), and op
 defaults. Relative paths are resolved from the caller's directory; absolute
 paths allow running from elsewhere.
 
+The throttle argument drives the engine's speed-control input, as the GUI does.
+Throttle curves and governors in the engine script determine the resulting
+plate opening; the argument is not a direct plate angle.
+With this correction, the bundled radial-nine completed a 7-second run with
+3 seconds of starter and a 0.3 input at approximately 3451 RPM. The Merlin still
+stalled under those same settings; these settings are not universal start
+procedures. No engine tuning was changed to obtain these observations.
+
 Numeric arguments must be finite numbers; decimal and scientific notation are
 accepted. Unit suffixes and trailing text are rejected (`0.01` seconds is valid,
 `10ms` is not). Invalid arguments are rejected before opening the output WAV.
@@ -47,6 +55,11 @@ condition: starter duration, throttle, and engine settings affect these outcomes
 This is a diagnostic tool, not a substitute for graphics/audio-device testing.
 
 ## Local observations (Windows Release, 2026-09-08)
+
+Historical results below predate the speed-control fix: the engine controller
+overwrote the requested throttle during these runs. The measured values are
+retained for reference, but the listed throttle settings were not maintained
+and these runs cannot establish behavior at those settings.
 
 | Engine / controls | Simulated | Wall time | Final RPM | Clipped samples |
 | --- | --- | --- | --- | --- |

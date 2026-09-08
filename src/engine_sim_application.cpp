@@ -565,7 +565,7 @@ void EngineSimApplication::run(int maxFrames) {
         processEngineInput();
         if (m_diagnosticMode && m_iceEngine != nullptr) {
             m_iceEngine->getIgnitionModule()->m_enabled = true;
-            m_iceEngine->setThrottle(0.1);
+            m_iceEngine->setSpeedControl(0.1);
         }
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Insert) &&
