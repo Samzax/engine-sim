@@ -1,6 +1,7 @@
 #include "../scripting/include/compiler.h"
 #include "../include/simulator.h"
 #include "../include/wave_reader.h"
+#include "../include/gpu_pipe.h"
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -88,6 +89,7 @@ int main(int argc, char **argv) {
     }
     try {
         const double duration = parseNumber(argv[3], "Duration");
+        std::cout << "Pipe backend: " << gpu_pipe::deviceName() << '\n';
         const double starterDuration = argc > 4 ? parseNumber(argv[4], "Starter duration")
             : (duration < 1.0 ? duration : 1.0);
         const double throttle = argc > 5 ? parseNumber(argv[5], "Throttle") : 0.1;

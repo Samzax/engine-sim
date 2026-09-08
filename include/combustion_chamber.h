@@ -77,6 +77,13 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void ignite();
         void update(double dt);
         void flow(double dt);
+        void flowPorts(double dt) { flowStep(dt,true); }
+        GasPipe *intakePipe() { return &m_intakePipe; }
+        GasPipe *exhaustPipe() { return &m_exhaustPipe; }
+        void aggregatePipes() {
+            m_intakePipe.aggregate(m_intakeRunnerAndManifold);
+            m_exhaustPipe.aggregate(m_exhaustRunnerAndPrimary);
+        }
         void configureGas(bool enabled, double fuelMass, double oxygenPerFuel) {
             m_system.setVariableProperties(enabled);
             m_intakeRunnerAndManifold.setVariableProperties(enabled);
@@ -148,7 +155,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         bool m_dynamicCombustion = true;
         LubricationModel m_lubrication;
         GasPipe m_intakePipe, m_exhaustPipe;
-        void flowStep(double dt);
+        void flowStep(double dt, bool deferPipes=false);
 };
 
 #endif /* ATG_ENGINE_SIM_COMBUSTION_CHAMBER_H */

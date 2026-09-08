@@ -266,7 +266,7 @@ void CombustionChamber::flow(double dt) {
     }
 }
 
-void CombustionChamber::flowStep(double dt) {
+void CombustionChamber::flowStep(double dt, bool deferPipes) {
     if (m_system.temperature() > m_peakTemperature) {
         m_peakTemperature = m_system.temperature();
     }
@@ -336,14 +336,13 @@ void CombustionChamber::flowStep(double dt) {
     flowParams.system_1 = exhaust->getSystem();
     GasSystem::flow(flowParams);
 
+    if (!deferPipes) GasPipe::advancePair(m_intakePipe, m_exhaustPipe, dt);
     if (m_intakePipe.active()) {
-        m_intakePipe.advance(dt);
-        m_intakePipe.aggregate(m_intakeRunnerAndManifold);
+        if (!deferPipes) m_intakePipe.aggregate(m_intakeRunnerAndManifold);
     } else m_intakeRunnerAndManifold.updateVelocity(dt, intake->getVelocityDecay());
     m_system.updateVelocity(dt, 0.5);
     if (m_exhaustPipe.active()) {
-        m_exhaustPipe.advance(dt);
-        m_exhaustPipe.aggregate(m_exhaustRunnerAndPrimary);
+        if (!deferPipes) m_exhaustPipe.aggregate(m_exhaustRunnerAndPrimary);
     } else m_exhaustRunnerAndPrimary.updateVelocity(dt, exhaust->getVelocityDecay());
 
     if (std::abs(intakeFlow) > 1E-9 && m_lit) {

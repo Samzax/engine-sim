@@ -78,6 +78,52 @@ TEST(GasSystemTests, DistributedPipeWaveTravelAndConservation) {
     EXPECT_GT(pipe.last().pressure(),1e5+50);
 }
 
+TEST(GasSystemTests, CudaPipeMatchesCpuAndConservesEnergy) {
+    if (!gpu_pipe::enabled()) GTEST_SKIP() << "Set ENGINE_SIM_GPU=1 in a CUDA build";
+    for (int count : {8,64}) {
+        GasSystem prototype;
+        prototype.setVariableProperties(true);
+        prototype.initialize(1e5,.001,300,{0,.79,.21});
+        GasPipe intake,exhaust;
+        intake.initialize(prototype,1,.001,count,.02);
+        exhaust.initialize(prototype,.5,.002,count,.04);
+        double initialMass=0,initialEnergy=0;
+        for (int i=0;i<count;++i) {
+            GasSystem::Mix mix{.01,.80,.19};
+            mix.p_co2=.08; mix.p_h2o=.12; mix.residualFraction=.2;
+            const double temperature=150+6850.0*i/(count-1);
+            intake.cell(i).initialize(1e5+20000*std::cos(i),.001/count,temperature,mix);
+            exhaust.cell(i).initialize(2e5+50000*std::sin(i),.001/count,temperature,mix);
+            initialMass+=intake.cell(i).mass()+exhaust.cell(i).mass();
+            initialEnergy+=intake.cell(i).totalEnergy()+exhaust.cell(i).totalEnergy();
+        }
+        // A split port exchange may temporarily exhaust an endpoint's energy.
+        // Its neighbour refills it in the conservative pipe step. Both solvers
+        // must handle this without inventing energy or rejecting valid inflow.
+        initialEnergy-=intake.first().totalEnergy();
+        intake.first().changeEnergy(-intake.first().kineticEnergy());
+        auto cpuIntake=intake,cpuExhaust=exhaust;
+        for(int step=0;step<20;++step) {
+            cpuIntake.advance(1e-5); cpuExhaust.advance(1e-5);
+            GasPipe::advancePair(intake,exhaust,1e-5);
+        }
+        double mass=0,energy=0;
+        for(int i=0;i<count;++i) {
+            for(auto pair : {std::make_pair(&intake,&cpuIntake),std::make_pair(&exhaust,&cpuExhaust)}) {
+                const auto &actual=pair.first->cell(i), &expected=pair.second->cell(i);
+                EXPECT_NEAR(actual.pressure(),expected.pressure(),expected.pressure()*1e-7);
+                EXPECT_NEAR(actual.temperature(),expected.temperature(),expected.temperature()*1e-7);
+                EXPECT_NEAR(actual.velocity_x(),expected.velocity_x(),1e-5);
+                EXPECT_NEAR(actual.mix().p_co2,expected.mix().p_co2,1e-8);
+                EXPECT_NEAR(actual.mix().residualFraction,expected.mix().residualFraction,1e-8);
+                mass+=actual.mass(); energy+=actual.totalEnergy();
+            }
+        }
+        EXPECT_NEAR(mass,initialMass,initialMass*1e-10);
+        EXPECT_NEAR(energy,initialEnergy,initialEnergy*1e-10);
+    }
+}
+
 TEST(GasSystemTests, OilViscosityAndFrictionHeatBalance) {
     CylinderThermalModel wall;
     CylinderThermalModel::Parameters wp;

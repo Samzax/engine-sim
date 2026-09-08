@@ -40,6 +40,7 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
     m_vehicle = vehicle;
     m_transmission = transmission;
 
+    m_pipes.clear();
     const bool variableGas = engine->variableGasProperties();
     for (int i = 0; i < engine->getIntakeCount(); ++i)
         engine->getIntake(i)->configureGas(variableGas, engine->getFuel()->getMolecularMass(), engine->getFuel()->getMolecularAfr());
@@ -48,6 +49,10 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
     for (int i = 0; i < engine->getCylinderCount(); ++i) {
         auto *chamber = engine->getChamber(i);
         chamber->configureGas(variableGas,engine->getFuel()->getMolecularMass(),engine->getFuel()->getMolecularAfr());
+        if (variableGas) {
+            if(chamber->intakePipe()->active()) m_pipes.push_back(chamber->intakePipe());
+            if(chamber->exhaustPipe()->active()) m_pipes.push_back(chamber->exhaustPipe());
+        }
     }
 
     const int crankCount = m_engine->getCrankshaftCount();
@@ -336,8 +341,22 @@ void PistonEngineSimulator::simulateStep_() {
             m_engine->getIntake(j)->m_flowRate += m_engine->getIntake(j)->m_flow;
         }
 
-        for (int j = 0; j < cylinderCount; ++j) {
-            m_engine->getChamber(j)->flow(fluidTimestep);
+        if(m_pipes.empty()) {
+            for (int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flow(fluidTimestep);
+        } else {
+            // Common CFL substeps let independent pipe interiors run in one batch.
+            // Port exchanges retain cylinder order for shared plenums/collectors.
+            double remaining=fluidTimestep;
+            int steps=0;
+            while(remaining>0) {
+                if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
+                double h=remaining;
+                for(auto *pipe:m_pipes) h=(std::min)(h,pipe->stableTimestep());
+                for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
+                GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
+                for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->aggregatePipes();
+                remaining-=h;
+            }
         }
     }
 
@@ -370,6 +389,7 @@ void PistonEngineSimulator::endFrame() {
 }
 
 void PistonEngineSimulator::destroy() {
+    m_pipes.clear();
     endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 

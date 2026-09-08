@@ -69,6 +69,7 @@ class PistonEngineSimulator : public Simulator {
         double *m_exhaustFlowStagingBuffer;
 
         int m_fluidSimulationSteps;
+        std::vector<GasPipe *> m_pipes;
 };
 
 #endif /* ATG_ENGINE_SIM_PISTON_ENGINE_SIMULATOR_H */

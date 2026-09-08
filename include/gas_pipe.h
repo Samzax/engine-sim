@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_GAS_PIPE_H
 
 #include "gas_system.h"
+#include "gpu_pipe.h"
 #include <array>
 #include <vector>
 #include <algorithm>
@@ -79,6 +80,41 @@ public:
                 m_cells[i].changeEnergy(oldBulk-m_cells[i].bulkKineticEnergy());
             }
             dt-=h;
+        }
+    }
+
+    static void advancePair(GasPipe &a, GasPipe &b, double dt) {
+        GasPipe *pipes[2]={&a,&b};
+        advanceBatch(pipes,2,dt);
+    }
+    static void advanceBatch(GasPipe *const *pipes, int count, double dt) {
+        if (!gpu_pipe::enabled()) {
+            for(int j=0;j<count;++j) pipes[j]->advance(dt);
+            return;
+        }
+        thread_local std::vector<gpu_pipe::Pipe> batch;
+        thread_local std::vector<GasPipe *> targets;
+        batch.clear(); targets.clear();
+        for(int j=0;j<count;++j) {
+            auto &pipe=*pipes[j];
+            if(!pipe.active()) continue;
+            if(!pipe.first().m_variableProperties) {pipe.advance(dt); continue;}
+            targets.push_back(&pipe);
+            batch.emplace_back(); auto &out=batch.back();
+            out.count=pipe.count(); out.dx=pipe.m_dx;
+            out.diameter=2*std::sqrt(pipe.m_area/constants::pi);
+            out.friction=pipe.m_frictionFactor;
+            out.fuelMass=pipe.m_cells.front().mix().fuelMolecularMass;
+            for (int i=0;i<out.count;++i) {
+                const auto u=conserved(pipe.m_cells[i]);
+                std::copy(u.begin(),u.end(),out.u[i]);
+            }
+        }
+        if(batch.empty()) return;
+        gpu_pipe::advance(batch.data(),static_cast<int>(batch.size()),dt);
+        for(size_t j=0;j<batch.size();++j) for(int i=0;i<batch[j].count;++i) {
+            Vector u; std::copy(batch[j].u[i],batch[j].u[i]+8,u.begin());
+            restore(targets[j]->m_cells[i],u);
         }
     }
 

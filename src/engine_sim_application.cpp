@@ -249,7 +249,8 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     m_engine.GetConsole()->SetDefaultFontDirectory(enginePath + "/fonts/");
 
     const std::string shaderPath = enginePath + "/shaders/";
-    const std::string winTitle = "Engine Sim | AngeTheGreat | v" + s_buildVersion;
+    const std::string winTitle = "Engine Sim | AngeTheGreat | v" + s_buildVersion
+        + (gpu_pipe::enabled() ? std::string(" | CUDA: ")+gpu_pipe::deviceName() : " | CPU physics");
     dbasic::DeltaEngine::GameEngineSettings settings;
     settings.API = api;
     settings.DepthBuffer = false;

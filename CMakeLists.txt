@@ -16,6 +16,7 @@ if (AUDIO_TESTS_ONLY)
 endif()
 
 option(DTV "Enable video output" OFF)
+option(ENGINE_SIM_CUDA "Build experimental double-precision CUDA pipe backend" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
 option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
 
@@ -152,6 +153,34 @@ add_library(engine-sim STATIC
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
 )
+
+if (ENGINE_SIM_CUDA)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
+    add_library(engine-sim-cuda STATIC src/gpu_pipe.cu)
+    set_target_properties(engine-sim-cuda PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON
+        CUDA_RUNTIME_LIBRARY Shared)
+    target_compile_options(engine-sim-cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+    if (MSVC)
+        target_compile_options(engine-sim-cuda PRIVATE
+            $<$<CONFIG:Debug>:-Xcompiler=/MDd>
+            $<$<NOT:$<CONFIG:Debug>>:-Xcompiler=/MD>)
+    endif()
+    if (WIN32)
+        get_filename_component(_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+        file(GLOB _cuda_runtime "${_cuda_bin}/cudart64_*.dll")
+        list(LENGTH _cuda_runtime _cuda_runtime_count)
+        if (NOT _cuda_runtime_count EQUAL 1)
+            message(FATAL_ERROR "Expected one CUDA runtime DLL beside nvcc")
+        endif()
+        add_custom_command(TARGET engine-sim-cuda POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_cuda_runtime}"
+                "$<TARGET_FILE_DIR:engine-sim-cuda>" VERBATIM)
+    endif()
+    target_link_libraries(engine-sim engine-sim-cuda)
+else()
+    target_sources(engine-sim PRIVATE src/gpu_pipe_stub.cpp)
+endif()
 
 target_link_libraries(engine-sim
     simple-2d-constraint-solver

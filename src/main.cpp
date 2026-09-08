@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <fstream>
+#include <exception>
 
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
@@ -28,31 +29,39 @@ int WINAPI WinMain(
         report.close();
         if (!report) return 3;
     }
-    application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
-    const bool hasEngine = application.getSimulator()->getEngine() != nullptr;
-    if (diagnostic && hasEngine == expectEmptyEngine) {
+    try {
+        application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
+        const bool hasEngine = application.getSimulator()->getEngine() != nullptr;
+        if (diagnostic && hasEngine == expectEmptyEngine) {
+            application.destroy();
+            std::ofstream report("gui-check.txt");
+            report << "GUI diagnostic failed: expected " << (expectEmptyEngine ? "no engine" : "an engine")
+                << " at startup.\n";
+            return 4;
+        }
+        application.run(diagnostic ? 120 : 0);
+        const double diagnosticRpm = diagnostic && hasEngine
+            ? application.getSimulator()->getEngine()->getRpm() : 0.0;
         application.destroy();
-        std::ofstream report("gui-check.txt");
-        report << "GUI diagnostic failed: expected " << (expectEmptyEngine ? "no engine" : "an engine")
-            << " at startup.\n";
-        return 4;
-    }
-    application.run(diagnostic ? 120 : 0);
-    const double diagnosticRpm = diagnostic && hasEngine
-        ? application.getSimulator()->getEngine()->getRpm() : 0.0;
-    application.destroy();
-    if (diagnostic) {
-        std::ofstream report("gui-check.txt");
-        report << "GUI initialization, minimize/restore, ";
-        if (hasEngine) report << "successful reload, failed reload preserving the engine, ";
-        else report << "empty-engine dashboard, ";
-        report << "120 frame-loop iterations and shutdown completed.\n";
-        if (hasEngine) report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
+        if (diagnostic) {
+            std::ofstream report("gui-check.txt");
+            report << "GUI initialization, minimize/restore, ";
+            if (hasEngine) report << "successful reload, failed reload preserving the engine, ";
+            else report << "empty-engine dashboard, ";
+            report << "120 frame-loop iterations and shutdown completed.\n";
+            if (hasEngine) report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
-        report << "GUI video recording and encoder shutdown completed.\n";
+            report << "GUI video recording and encoder shutdown completed.\n";
 #endif
-        if (!report) return 3;
-    }
+            if (!report) return 3;
+        }
 
-    return 0;
+        return 0;
+    } catch (const std::exception &error) {
+        std::ofstream report(diagnostic ? "gui-check.txt" : "runtime-error.txt");
+        report << "Engine simulation failed: " << error.what() << '\n';
+        report.close();
+        if (!diagnostic) MessageBoxA(nullptr, error.what(), "Engine Sim simulation error", MB_OK | MB_ICONERROR);
+        return 5;
+    }
 }
