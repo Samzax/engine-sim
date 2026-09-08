@@ -22,6 +22,19 @@ namespace es_script {
         EngineNode() { /* void */ }
         virtual ~EngineNode() { /* void */ }
 
+        std::string validateAssembly() const {
+            if (m_crankshafts.empty()) return "Engine requires at least one crankshaft";
+            if (m_cylinderBanks.empty()) return "Engine requires at least one cylinder bank";
+            if (m_ignitionModule == nullptr) return "Engine requires an ignition module";
+            if (m_fuel == nullptr || m_throttle == nullptr)
+                return "Engine requires fuel and throttle definitions";
+            for (const CylinderBankNode *bank : m_cylinderBanks) {
+                if (bank->getCylinderCount() == 0) return "Cylinder bank requires at least one cylinder";
+                if (bank->getCylinderHead() == nullptr) return "Cylinder bank requires a cylinder head";
+            }
+            return {};
+        }
+
         void buildEngine(Engine *engine) {
             int cylinderCount = 0;
             for (const CylinderBankNode *bank : m_cylinderBanks) {

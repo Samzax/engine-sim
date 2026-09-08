@@ -32,6 +32,12 @@ namespace es_script {
         virtual void _evaluate() {
             EngineNode *engineNode = getObject<EngineNode>(m_engineInput);
 
+            const std::string error = engineNode->validateAssembly();
+            if (!error.empty()) {
+                throwError(error);
+                return;
+            }
+
             Engine *engine = new Engine;
             engineNode->buildEngine(engine);
             Compiler::output()->engine = engine;
