@@ -8,6 +8,12 @@ Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed scripts leave the current engine running;
 details are written to `error_log.log` in the working directory.
 
+Hold 1 through 5 for progressively slower simulation, down to 1/1000 speed.
+Release the key to return to normal speed. Fractional physics steps are retained
+between display frames, so the slowest settings no longer advance one step per
+frame regardless of the requested rate. Audio buffering can still make a small
+timing adjustment.
+
 The initial view fits the engine automatically. After panning or zooming,
 press Home to fit it again without restarting the simulation.
 

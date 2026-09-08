@@ -206,3 +206,30 @@ The old oxygen-only conversion assumed a different oxygen fraction from the
 intake supply and overstated the ratio. Exhaust oxygen uses the same configured
 fuel mass and reports oxygen even when no unburned fuel remains. These changes
 correct the displayed mixture values; the combustion model remains an approximation.
+
+### Slow-motion timing
+
+The frame scheduler now carries fractional physics steps into later frames.
+Previously, the audio catch-up adjustment forced at least one step per display
+frame, making the 1/1000 speed setting depend on display FPS. Over ten seconds
+at a 10 kHz physics frequency, the regression reproduced 300, 600 and 2,400
+scheduled steps at 30, 60 and 240 FPS. The corrected scheduler produces about
+110 steps in each case: 100 for the requested speed plus the existing 10%
+catch-up while the audio queue is below its latency target. This checks step
+scheduling; it does not measure audible output at extreme slow-motion settings.
+
+### Script assembly errors and reload cleanup
+
+Engine selection validates required components and rod-journal ownership before
+allocating the runtime engine. It rejects reused connecting-rod instances,
+cycles in master-rod connections, and ignition wires connected to banks outside
+the selected engine. Runtime script errors include source locations in
+`error_log.log`. Manual malformed-script cases exercised these errors; all 20
+bundled engines passed short load-and-simulate checks after the wiring changes.
+
+Repeated engine, vehicle and transmission selections within one script now
+release the superseded objects. Simulator teardown also owns and releases the
+physics solvers borrowed by the dependency, and releases the generic solver's
+intermediate matrices. Debug lifecycle checks and the isolated GUI reload check
+passed. The GUI check deliberately exercises a compile failure; it does not
+exercise every malformed assembly through the GUI.
