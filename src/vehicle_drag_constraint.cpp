@@ -53,7 +53,9 @@ void VehicleDragConstraint::calculate(Output *output, atg_scs::SystemState *syst
     const double A = m_vehicle->getCrossSectionArea();
     const double rollingResistance = m_vehicle->getRollingResistance();
 
-    output->limits[0][0] =
-        -m_vehicle->linearForceToVirtualTorque(rollingResistance + 0.5 * airDensity * v_squared * c_d * A);
-    output->limits[0][1] = 0;
+    const double dragTorque = m_vehicle->linearForceToVirtualTorque(
+        rollingResistance + 0.5 * airDensity * v_squared * c_d * A);
+    // Let the damping constraint oppose motion in either rotation direction.
+    output->limits[0][0] = -dragTorque;
+    output->limits[0][1] = dragTorque;
 }

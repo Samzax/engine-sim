@@ -3,6 +3,7 @@
 #include "../include/simulator.h"
 #include "../include/piston_engine_simulator.h"
 #include "../include/constants.h"
+#include "../include/vehicle_drag_constraint.h"
 #include <memory>
 #include <limits>
 #include <stdexcept>
@@ -16,6 +17,33 @@ struct EngineOwner {
         delete output.transmission;
     }
 };
+}
+
+TEST(SimulatorRegression, RoadDragOpposesBothRotationDirections) {
+    double finalSpeeds[2];
+    for (int direction = 0; direction < 2; ++direction) {
+        atg_scs::GaussSeidelSleSolver solver;
+        atg_scs::OptimizedNsvRigidBodySystem system;
+        system.initialize(&solver);
+        atg_scs::RigidBody body;
+        body.reset();
+        body.m = 1000;
+        body.I = 100;
+        body.v_theta = direction == 0 ? -10 : 10;
+        system.addRigidBody(&body);
+        Vehicle vehicle;
+        vehicle.initialize({1000, 0.3, 2.0, 3.0, 0.3, 100});
+        vehicle.addToSystem(&system, &body);
+        VehicleDragConstraint drag;
+        drag.initialize(&body, &vehicle);
+        system.addConstraint(&drag);
+        const double initialSpeed = vehicle.getSpeed();
+        system.process(0.1, 100);
+        finalSpeeds[direction] = vehicle.getSpeed();
+        EXPECT_LT(finalSpeeds[direction], initialSpeed);
+        EXPECT_GT(finalSpeeds[direction], 0);
+    }
+    EXPECT_NEAR(finalSpeeds[0], finalSpeeds[1], 1e-10);
 }
 
 TEST(SimulatorRegression, InvalidEngineRejectedBeforeSimulatorInitialization) {
