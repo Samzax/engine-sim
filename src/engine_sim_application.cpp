@@ -328,20 +328,28 @@ void EngineSimApplication::process(float frame_dt) {
     }
 
     if (readSamples > 0) {
-        SampleOffset size0, size1;
-        void *data0, *data1;
-        m_audioSource->LockBufferSegment(
+        SampleOffset size0 = 0, size1 = 0;
+        void *data0 = nullptr, *data1 = nullptr;
+        const ysError lockResult = m_audioSource->LockBufferSegment(
             m_audioBuffer.m_writePointer, readSamples, &data0, &size0, &data1, &size1);
+        if (lockResult != ysError::None) {
+            m_infoCluster->setLogMessage("Audio buffer unavailable; retrying next frame");
+            return;
+        }
 
-        m_audioBuffer.copyBuffer(
+        if (size0 > 0) m_audioBuffer.copyBuffer(
             reinterpret_cast<int16_t *>(data0), m_audioBuffer.m_writePointer, size0);
-        m_audioBuffer.copyBuffer(
+        if (size1 > 0) m_audioBuffer.copyBuffer(
             reinterpret_cast<int16_t *>(data1),
             m_audioBuffer.getBufferIndex(m_audioBuffer.m_writePointer, size0),
             size1);
 
-        m_audioSource->UnlockBufferSegments(data0, size0, data1, size1);
-        m_audioBuffer.commitBlock(readSamples);
+        if (m_audioSource->UnlockBufferSegments(data0, size0, data1, size1) == ysError::None) {
+            m_audioBuffer.commitBlock(readSamples);
+        }
+        else {
+            m_infoCluster->setLogMessage("Audio buffer upload failed; retrying next frame");
+        }
     }
 
     m_performanceCluster->addInputBufferUsageSample(

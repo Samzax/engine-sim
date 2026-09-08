@@ -80,3 +80,8 @@ with a failure status. This intentionally avoids calling the bundled graphics
 engine's cleanup on partially initialized state; Windows reclaims resources on
 process exit. Both Windows application configurations build. Dialog behavior and
 hardware failure paths remain unverified because desktop control is paused.
+
+Audio-device uploads now check lock/unlock results, skip empty segments, and only
+advance the write position after a successful upload. A failed lock previously
+left pointer/length outputs unchecked before copying into them. Both application
+configurations build; real device-loss recovery still needs desktop verification.
