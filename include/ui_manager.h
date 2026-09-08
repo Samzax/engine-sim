@@ -16,6 +16,7 @@ class UiManager {
 
         void update(float dt);
         void render();
+        void consumeMouseScroll(int position) { m_lastMouseScroll = position; }
 
         UiElement *getRoot() { return &m_root; }
 

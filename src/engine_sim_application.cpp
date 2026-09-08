@@ -1016,7 +1016,10 @@ void EngineSimApplication::processEngineInput() {
     }
     else if (fineControlMode && !fineControlInUse) {
         m_targetSpeedSetting = clamp(m_targetSpeedSetting + mouseWheelDelta * 0.0001);
+        fineControlInUse = true;
     }
+
+    if (fineControlInUse) m_uiManager.consumeMouseScroll(mouseWheel);
 
     if (prevTargetThrottle != m_targetSpeedSetting) {
         m_infoCluster->setLogMessage("Speed control set to " + std::to_string(m_targetSpeedSetting));
