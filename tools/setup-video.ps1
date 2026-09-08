@@ -1,4 +1,7 @@
-param([string]$Directory = (Join-Path $PSScriptRoot '../build/deps'))
+param(
+    [string]$Directory = (Join-Path $PSScriptRoot '../build/deps'),
+    [string]$CMake = 'cmake'
+)
 $ErrorActionPreference = 'Stop'
 $Directory = [IO.Path]::GetFullPath($Directory)
 New-Item -ItemType Directory -Path $Directory -Force | Out-Null
@@ -15,8 +18,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $sdk '.verified'))) {
     if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $sha256) {
         throw "FFmpeg checksum mismatch: $archive"
     }
-    & tar -xf $archive -C $Directory
-    if ($LASTEXITCODE -ne 0) { throw 'FFmpeg extraction failed' }
+    # The Windows Server system tar can lack LZMA support; CMake bundles it.
+    Push-Location $Directory
+    try {
+        & $CMake -E tar xf $archive
+        if ($LASTEXITCODE -ne 0) { throw 'FFmpeg extraction failed' }
+    }
+    finally { Pop-Location }
     Set-Content -LiteralPath (Join-Path $sdk '.verified') -Value $sha256
 }
 foreach ($required in 'include/libavcodec/avcodec.h', 'lib/avcodec.lib', 'bin/avcodec-63.dll', 'LICENSE') {
