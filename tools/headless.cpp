@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
         out.engine->getIgnitionModule()->m_enabled = true;
         out.engine->setSpeedControl(throttle);
         WaveOutput wave(argc > 6 ? argv[6] : nullptr);
-        double simulated = 0, energy = 0;
+        double simulated = 0, energy = 0, peakRpm = 0;
         uint64_t samples = 0, clipped = 0;
         const auto start = std::chrono::steady_clock::now();
         while (simulated < duration) {
@@ -164,11 +164,12 @@ int main(int argc, char **argv) {
             if (!std::isfinite(out.engine->getRpm()) || !std::isfinite(out.engine->getManifoldPressure())) {
                 throw std::runtime_error("Non-finite engine state");
             }
+            peakRpm = std::fmax(peakRpm, std::abs(out.engine->getRpm()));
         }
         const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         wave.finish();
         std::cout << out.engine->getName() << ": simulated=" << simulated << "s, wall=" << wall
-            << "s, rpm=" << out.engine->getRpm() << ", samples=" << samples
+            << "s, rpm=" << out.engine->getRpm() << ", peak_rpm=" << peakRpm << ", samples=" << samples
             << ", rms=" << (samples ? std::sqrt(energy / samples) : 0)
             << ", clipped=" << clipped << '\n';
         return samples ? 0 : 1;

@@ -48,7 +48,10 @@ cmake --build build/windows --config Release --target engine-sim-headless
 
 The runner uses synchronous audio rendering and drains every frame. It retains
 the simulator's adaptive frame-step logic and reports actual elapsed simulation
-time, which can slightly exceed the requested duration. A nonzero exit indicates
+time, which can slightly exceed the requested duration. `rpm` is the final
+reading; `peak_rpm` is the greatest absolute RPM sampled at frame boundaries,
+including cranking. It helps distinguish a failed start from a later stall.
+A nonzero exit indicates
 an input/compilation error, non-finite state, no simulation progress, or no audio
 samples. It does not assume a particular RPM or clipping count is a pass/fail
 condition: starter duration, throttle, and engine settings affect these outcomes.
