@@ -57,6 +57,16 @@ encoder cannot initialize, recording retries with software encoding.
 GUI capture through that fallback passed in the isolated desktop diagnostic;
 hardware recording with the current FFmpeg SDK still needs a compatible driver.
 
+For a video-enabled build, use an FFmpeg shared development distribution and
+configure a separate build directory with `-DDTV=ON` and
+`-DCMAKE_PREFIX_PATH=C:/path/to/ffmpeg-shared`. Its `lib` directory must contain
+the import libraries and its `bin` directory the matching runtime DLLs.
+`ENGINE_SIM_FFMPEG_RUNTIME_DIR` and `ENGINE_SIM_FFMPEG_LICENSE` can override the
+detected runtime directory and license file. CMake copies the runtime DLLs
+beside the development executable and includes them in the
+`engine-sim-windows-x64-video.zip` package, along with the supplied license and
+build description. The default non-video ZIP retains its existing filename.
+
 ## Building the ZIP
 
 After a Release build, run:
