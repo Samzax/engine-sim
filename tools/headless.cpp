@@ -9,6 +9,10 @@
 #include <memory>
 #include <stdexcept>
 
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+
 namespace {
 double parseNumber(const char *text, const char *name) {
     try {
@@ -71,6 +75,13 @@ struct ScriptOwner {
 }
 
 int main(int argc, char **argv) {
+#if defined(_MSC_VER) && defined(_DEBUG)
+    // Headless diagnostics must report failures without opening desktop dialogs.
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
     if (argc < 4 || argc > 7) {
         std::cerr << "Usage: engine-sim-headless <script.mr> <es-library-directory> <seconds> [starter-seconds=1] [throttle=0.1] [output.wav]\n";
         return 1;
