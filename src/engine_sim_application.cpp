@@ -894,7 +894,9 @@ void EngineSimApplication::loadScript(const std::string &scriptPath) {
         delete vehicle;
         delete transmission;
         if (m_infoCluster == nullptr) refreshUserInterface();
-        m_infoCluster->setLogMessage("Script failed; keeping current engine. See error_log.log");
+        m_infoCluster->setLogMessage(m_iceEngine != nullptr
+            ? "Script failed; keeping current engine. See error_log.log"
+            : "Script failed; no engine loaded. See error_log.log");
         return;
     }
 
@@ -926,7 +928,9 @@ void EngineSimApplication::loadScript(const std::string &scriptPath) {
         delete vehicle;
         delete transmission;
         if (m_infoCluster == nullptr) refreshUserInterface();
-        m_infoCluster->setLogMessage("Invalid engine; keeping current engine. See error_log.log");
+        m_infoCluster->setLogMessage(m_iceEngine != nullptr
+            ? "Invalid engine; keeping current engine. See error_log.log"
+            : "Invalid engine; no engine loaded. See error_log.log");
         return;
     }
     configure(settings);
