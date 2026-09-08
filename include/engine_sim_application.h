@@ -154,7 +154,7 @@ class EngineSimApplication {
         bool m_paused;
 
     protected:
-        void startRecording();
+        void startRecording(bool hardwareEncoding = true);
         void updateScreenSizeStability();
         bool readyToRecord();
         void stopRecording();
@@ -165,6 +165,7 @@ class EngineSimApplication {
         int m_screenResolution[ScreenResolutionHistoryLength][2];
         int m_screenResolutionIndex;
         bool m_recording;
+        bool m_recordingHardware = true;
 
         ysVector m_background;
         ysVector m_foreground;

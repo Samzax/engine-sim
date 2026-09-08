@@ -51,8 +51,11 @@ Video recording is optional and disabled in the default build. In builds made
 with `DTV=ON`, Insert starts or stops recording. The app creates `video_capture`
 in its working directory and writes `engine_sim_video_capture.mp4` there;
 starting another recording overwrites that file. Folder creation errors are
-reported in the status panel and `error_log.log`. Full FFmpeg recording remains
-unverified in the current validation environment.
+reported in the status panel and `error_log.log`. Odd window dimensions are
+scaled down by at most one pixel per axis for H.264 output. If the hardware
+encoder cannot initialize, recording retries with software encoding.
+GUI capture through that fallback passed in the isolated desktop diagnostic;
+hardware recording with the current FFmpeg SDK still needs a compatible driver.
 
 ## Building the ZIP
 

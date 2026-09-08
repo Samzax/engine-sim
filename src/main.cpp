@@ -36,6 +36,9 @@ int WINAPI WinMain(
         report << "GUI initialization, minimize/restore, successful reload, failed reload preserving the engine, "
             "120 frame-loop iterations and shutdown completed.\n";
         report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
+#ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
+        report << "GUI video recording and encoder shutdown completed.\n";
+#endif
         if (!report) return 3;
     }
 

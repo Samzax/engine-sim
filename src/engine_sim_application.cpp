@@ -607,6 +607,19 @@ void EngineSimApplication::run(int maxFrames) {
             stopRecording();
         }
 
+#ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
+        if (m_diagnosticMode && frames == 90) {
+            startRecording();
+            if (!isRecording()) startupFailure("GUI diagnostic could not start recording.");
+        }
+        if (m_diagnosticMode && frames == 110) {
+            if (!isRecording()) startupFailure("GUI diagnostic recording stopped unexpectedly.");
+            stopRecording();
+            if (m_encoder.getError() != atg_dtv::Encoder::Error::None)
+                startupFailure("GUI diagnostic video encoding failed.");
+        }
+#endif
+
         if (!m_paused || m_engine.ProcessKeyDown(ysKey::Code::Right)) {
             process(m_engine.GetFrameLength());
         }
@@ -1335,7 +1348,7 @@ void EngineSimApplication::refreshUserInterface() {
     m_mixerCluster->setSimulator(m_simulator);
 }
 
-void EngineSimApplication::startRecording() {
+void EngineSimApplication::startRecording(bool hardwareEncoding) {
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
     if (m_recording || !readyToRecord()) return;
     atg_dtv::Encoder::VideoSettings settings{};
@@ -1352,12 +1365,14 @@ void EngineSimApplication::startRecording() {
     settings.fname = (outputDirectory / "engine_sim_video_capture.mp4").string();
     settings.inputWidth = m_engine.GetScreenWidth();
     settings.inputHeight = m_engine.GetScreenHeight();
-    settings.width = settings.inputWidth;
-    settings.height = settings.inputHeight;
-    settings.hardwareEncoding = true;
+    // YUV420 video needs even output dimensions; window client sizes need not be.
+    settings.width = settings.inputWidth - settings.inputWidth % 2;
+    settings.height = settings.inputHeight - settings.inputHeight % 2;
+    settings.hardwareEncoding = hardwareEncoding;
     settings.inputAlpha = true;
     settings.bitRate = 40000000;
 
+    m_recordingHardware = hardwareEncoding;
     m_encoder.run(settings, 2);
     m_recording = true;
 #else
@@ -1376,8 +1391,7 @@ bool EngineSimApplication::readyToRecord() {
     const int w = m_screenResolution[0][0];
     const int h = m_screenResolution[0][1];
 
-    if (w <= 0 || h <= 0) return false;
-    if ((w % 2) != 0 || (h % 2) != 0) return false;
+    if (w < 2 || h < 2) return false;
 
     for (int i = 1; i < ScreenResolutionHistoryLength; ++i) {
         if (m_screenResolution[i][0] != w) return false;
@@ -1399,8 +1413,19 @@ void EngineSimApplication::stopRecording() {
 
 void EngineSimApplication::recordFrame() {
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
-    if (m_encoder.getError() != atg_dtv::Encoder::Error::None) {
+    const auto encoderError = m_encoder.getError();
+    if (encoderError != atg_dtv::Encoder::Error::None) {
+        const bool retrySoftware = m_recordingHardware
+            && (encoderError == atg_dtv::Encoder::Error::CouldNotOpenVideoCodec
+                || encoderError == atg_dtv::Encoder::Error::CouldNotFindEncoder);
         stopRecording();
+        if (retrySoftware) {
+            startRecording(false);
+            m_infoCluster->setLogMessage("Hardware encoder unavailable; using software video encoding");
+            std::ofstream log("error_log.log", std::ios::app);
+            log << "Hardware video encoder unavailable; retrying with software encoding.\n";
+            return;
+        }
         m_infoCluster->setLogMessage("Video encoder failed; recording stopped");
         return;
     }

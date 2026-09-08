@@ -66,7 +66,7 @@ Discord Rich Presence remains available in Release. Debug builds omit it because
   compatibility, not sustained combustion or stable idle.
 - DirectSound buffer upload/readback passed separately in Debug and Release;
   see `audio-device-check.md`. Audible quality, device disconnection/recovery,
-  GPU removal/reset and full GUI video capture remain unverified. These limits
+  GPU removal/reset and hardware video capture remain unverified. These limits
   do not prevent normal background GUI checks.
 - Remote CI results belong to individual commits. Local checks and a previous
   successful CI run do not establish that the latest pushed revision is green.
@@ -134,7 +134,8 @@ readback succeed. A full queue previously returned no frame, but the app still
 submitted it, increasing the queue length beyond its capacity. Encoder or
 readback errors stop recording and report a status message. The video-enabled
 application translation unit passes MSVC syntax checking with the actual
-dependency headers; full GUI capture into the encoder has not been verified.
+dependency headers. Subsequent full GUI capture passed through software encoding;
+see `gui-check.md` for the output validation and dependency setup.
 
 The pinned video queue also retained its stopped flag when initialized for a
 second recording, causing empty-queue reads to return immediately and the
@@ -150,8 +151,8 @@ against FFmpeg 9.0.1; the patched recorder library and demo linked successfully.
 Using the development files from the [Gyan shared build](https://www.gyan.dev/ffmpeg/builds/),
 a background check encoded two successive software H.264 recordings with the
 same encoder instance. FFprobe counted 30 frames at 64x64 in each file, and
-FFmpeg decoded both without errors. This verifies encoding and queue reuse,
-but does not yet verify GUI frame capture or hardware encoding. The downloaded
+FFmpeg decoded both without errors. This standalone check verifies encoding and
+queue reuse; the subsequent GUI capture check is documented in `gui-check.md`. The downloaded
 SDK remains under the ignored build directory; the default package still has
 video capture disabled.
 

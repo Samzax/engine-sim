@@ -36,6 +36,13 @@ directory as a script and verifies that the current simulator survives. This
 does not modify engine scripts. A successful diagnostic consequently leaves an
 expected "Can't find file" entry in `error_log.log`; its process exit code and
 completion report determine success.
+When built with `DTV=ON`, the diagnostic also records frames 90 through 109 and
+stops the encoder at frame 110. On 2026-09-08, FFmpeg 9.0.1 could not initialize
+NVENC with the installed driver, so the app retried in software. The resulting
+1904x1040 H.264 file contained 18 frames and decoded without errors; an extracted
+frame showed the simulator UI correctly. The SDK DLLs were supplied through the
+diagnostic process's PATH. This does not establish a self-contained video-enabled
+portable package or successful hardware encoding with that SDK.
 Use the launcher's exit code to judge the current run; an older report may remain
 after a loader failure. Once the app starts, it replaces that report with a
 pending marker before initialization. Startup failures are recorded in
