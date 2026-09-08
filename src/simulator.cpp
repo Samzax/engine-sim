@@ -89,18 +89,22 @@ void Simulator::startFrame(double dt) {
     m_synthesizer.setInputSampleRate(m_simulationFrequency * m_simulationSpeed);
 
     const double timestep = getTimestep();
-    m_steps = (int)std::round((dt * m_simulationSpeed) / timestep);
+    double requestedSteps = (dt * m_simulationSpeed) / timestep;
 
     const double targetLatency = getSynthesizerInputLatencyTarget();
-    if (m_synthesizer.getLatency() < targetLatency) {
-        m_steps = static_cast<int>((m_steps + 1) * 1.1);
+    const double latency = m_synthesizer.getLatency();
+    if (latency < targetLatency) {
+        requestedSteps *= 1.1;
     }
-    else if (m_synthesizer.getLatency() > targetLatency) {
-        m_steps = static_cast<int>((m_steps - 1) * 0.9);
-        if (m_steps < 0) {
-            m_steps = 0;
-        }
+    else if (latency > targetLatency) {
+        requestedSteps *= 0.9;
     }
+
+    // Slow motion can require less than one step per display frame. Carry the
+    // remainder instead of rounding each frame or forcing a catch-up step.
+    m_pendingSteps += requestedSteps;
+    m_steps = static_cast<int>(std::floor(m_pendingSteps));
+    m_pendingSteps -= m_steps;
 
     if (m_steps > 0) {
         for (int i = 0; i < m_engine->getIntakeCount(); ++i) {
@@ -193,6 +197,7 @@ void Simulator::destroy() {
     m_vehicle = nullptr;
     m_transmission = nullptr;
     m_steps = 0;
+    m_pendingSteps = 0.0;
 }
 
 void Simulator::setSimulationFrequency(int frequency) {

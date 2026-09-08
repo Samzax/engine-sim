@@ -104,6 +104,23 @@ TEST(SimulatorRegression, GenericSolverRepeatedCleanup) {
     simulator.destroy();
 }
 
+TEST(SimulatorRegression, SlowMotionSchedulingDoesNotDependOnDisplayFramerate) {
+    for (int fps : {30, 60, 240}) {
+        Engine engine;
+        PistonEngineSimulator simulator;
+        simulator.loadSimulation(&engine, nullptr, nullptr);
+        simulator.setSimulationSpeed(0.001);
+        int steps = 0;
+        for (int frame = 0; frame < fps * 10; ++frame) {
+            simulator.startFrame(1.0 / fps);
+            steps += simulator.getFrameIterationCount();
+        }
+        // 10 seconds at 10 kHz and 1/1000 speed, plus the existing 10%
+        // catch-up for an empty audio queue. Rounding may leave one step pending.
+        EXPECT_NEAR(steps, 110, 1) << "fps=" << fps;
+    }
+}
+
 TEST(SimulatorRegression, ExhaustOxygenDoesNotRequireUnburnedFuel) {
     Engine engine;
     Engine::Parameters params{};
