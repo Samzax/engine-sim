@@ -211,7 +211,22 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
 
 void EngineSimApplication::initialize() {
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
-    checkStartup(m_assetManager.CompileInterchangeFile((m_assetPath + "/assets").c_str(), 1.0f, true), "Asset compilation");
+    const std::filesystem::path geometryPath = std::filesystem::path(m_assetPath) / "assets";
+    const std::filesystem::path geometrySource = geometryPath.string() + ".dia";
+    const std::filesystem::path geometryCache = geometryPath.string() + ".ysce";
+    std::error_code cacheError;
+    const auto cacheTime = std::filesystem::last_write_time(geometryCache, cacheError);
+    bool rebuildGeometry = static_cast<bool>(cacheError);
+    if (!rebuildGeometry) {
+        const auto sourceTime = std::filesystem::last_write_time(geometrySource, cacheError);
+        rebuildGeometry = static_cast<bool>(cacheError) || sourceTime > cacheTime;
+    }
+    if (!rebuildGeometry) {
+        const auto cacheSize = std::filesystem::file_size(geometryCache, cacheError);
+        rebuildGeometry = static_cast<bool>(cacheError) || cacheSize == 0;
+    }
+    if (rebuildGeometry)
+        checkStartup(m_assetManager.CompileInterchangeFile(geometryPath.string().c_str(), 1.0f, true), "Asset compilation");
     checkStartup(m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true), "Asset loading");
 
     m_textRenderer.SetEngine(&m_engine);

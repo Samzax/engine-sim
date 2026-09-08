@@ -13,6 +13,11 @@ x64 PC with DirectX 11 graphics and a working audio output is required.
 Developer builds generate `delta.conf` beside the executable, pointing at the
 checkout. Portable packages use their own adjacent assets without that file.
 
+Startup reuses `assets/assets.ysce` when it is nonempty and at least as recent as
+the source geometry, `assets/assets.dia`. Missing, empty or older compiled files
+are rebuilt automatically. If you change the geometry exporter or restore files
+with misleading timestamps, remove `assets.ysce` to force a rebuild.
+
 For simulation and audio statistics without a window, use `engine-sim-headless.exe`.
 See `headless.md` for commands and controls.
 
