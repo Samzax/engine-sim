@@ -46,6 +46,35 @@ if (_present_match EQUAL -1)
     message(FATAL_ERROR "Delta Present implementation changed; review cmake/DeltaGraphicsFix.cmake")
 endif()
 string(REPLACE "${_present_call}" "${_checked_present}" _graphics_code "${_graphics_code}")
+# ReadRenderTarget must release its first allocation if the second fails, and
+# must never copy mapped data when Map failed.
+set(_staging_failure [=[    if (FAILED(result) || stagingTexture == nullptr) {
+        return YDS_ERROR_RETURN(ysError::ApiError);
+    }]=])
+set(_staging_cleanup [=[    if (FAILED(result) || stagingTexture == nullptr) {
+        resolveTexture->Release();
+        return YDS_ERROR_RETURN(ysError::ApiError);
+    }]=])
+set(_map_end [=[        &mappedResource);
+
+    for (int i = 0; i < src->GetHeight(); ++i) {]=])
+set(_checked_map [=[        &mappedResource);
+
+    if (FAILED(result)) {
+        stagingTexture->Release();
+        resolveTexture->Release();
+        return YDS_ERROR_RETURN(ysError::ApiError);
+    }
+
+    for (int i = 0; i < src->GetHeight(); ++i) {]=])
+foreach(_readback_anchor IN ITEMS _staging_failure _map_end)
+    string(FIND "${_graphics_code}" "${${_readback_anchor}}" _readback_match)
+    if (_readback_match EQUAL -1)
+        message(FATAL_ERROR "Delta readback implementation changed; review cmake/DeltaGraphicsFix.cmake")
+    endif()
+endforeach()
+string(REPLACE "${_staging_failure}" "${_staging_cleanup}" _graphics_code "${_graphics_code}")
+string(REPLACE "${_map_end}" "${_checked_map}" _graphics_code "${_graphics_code}")
 string(PREPEND _graphics_code "#include <fstream>\n")
 string(REPLACE "\"../include/" "\"${_graphics_dir}/include/" _graphics_code "${_graphics_code}")
 set(_graphics_patched "${PROJECT_BINARY_DIR}/dependency-fixes/yds_d3d11_device.cpp")
