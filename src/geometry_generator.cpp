@@ -357,6 +357,9 @@ bool GeometryGenerator::generateLine2d(
     const float dy = params.y1 - params.y0;
     const float length = std::sqrt(dx * dx + dy * dy);
 
+    // A collapsed line has no area and no direction to normalize.
+    if (length == 0.0f) return true;
+
     const float dir_x = dx / length;
     const float dir_y = dy / length;
 
