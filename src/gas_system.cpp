@@ -509,6 +509,10 @@ void GasSystem::dissipateVelocity(double dt, double timeConstant) {
 }
 
 double GasSystem::flow(const FlowParameters &params) {
+    // A closed port cannot exchange mass or momentum. Keep the existing path
+    // for temporarily negative sensible energy, which applies the energy floor.
+    if (params.k_flow == 0 && params.system_0->kineticEnergy() >= 0
+        && params.system_1->kineticEnergy() >= 0) return 0;
     GasSystem *source = nullptr, *sink = nullptr;
     double sourcePressure = 0, sinkPressure = 0;
     double dx, dy;
@@ -682,7 +686,7 @@ double GasSystem::flow(const FlowParameters &params) {
 
 double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix) {
     if (m_variableProperties) {
-        if (dt <= 0) return 0;
+        if (dt <= 0 || k_flow == 0) return 0;
         const bool outgoing = pressure() > P_env;
         const double gamma = outgoing ? heatCapacityRatio() : 1 + constants::R / mixtureCv(T_env, mix);
         double amount = dt * flowRate(k_flow, pressure(), P_env, temperature(), T_env, gamma,

@@ -3,6 +3,7 @@
 
 #include "gas_system.h"
 #include "gpu_pipe.h"
+#include "simulation_profile.h"
 #include <array>
 #include <vector>
 #include <algorithm>
@@ -101,6 +102,7 @@ public:
         advanceBatch(pipes,2,dt);
     }
     static void advanceBatch(GasPipe *const *pipes, int count, double dt) {
+        ENGINE_SIM_PROFILE_SCOPE(Pipes);
         if (!gpu_pipe::enabled()) {
             for(int j=0;j<count;++j) pipes[j]->advance(dt);
             return;

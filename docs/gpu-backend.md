@@ -137,6 +137,50 @@ it must not be interpreted as a valid timing result.
 
 ## Build and checks
 
+### Phase profiling and closed ports
+
+Configure a diagnostic build with `-DENGINE_SIM_PROFILE=ON` to print inclusive
+wall times and call counts for the simulation step, fluid work, reservoirs, CFL
+selection, chamber/port work, pipe batches, and CUDA launch/completion waits.
+Counters are local to each CPU thread and print on thread exit. Nested times
+must not be added together. The option defaults to OFF, which compiles out the
+timers entirely. Return it to OFF before release timing or packaging.
+
+For a 0.253-second starter run on the RTX 3090, the profiled Hayabusa took
+2.274 seconds inside simulation steps: 1.626 seconds in CUDA launch/completion
+waits and 0.325 seconds in CPU chamber/port work. The V12 took 1.798 seconds,
+including 1.040 seconds of CUDA waits and 0.450 seconds of chamber/port work.
+Those wait figures include kernel execution, submission, synchronization and
+scheduling; they are not isolated kernel timings. Even the measured CPU port
+work exceeded the simulated duration. Moving only pipe interiors onto the GPU
+therefore does not address the whole real-time bottleneck in these runs.
+
+This investigation also tried unrolling coefficient assembly and avoiding a
+dynamic coefficient-array address. CUDA stack use fell from 80 to zero bytes
+per thread, while register use rose from 94 to 104. Three full-engine comparisons
+did not demonstrate a reliable speedup, so that kernel experiment was reverted.
+
+Closed ports now bypass transfer calculations when both gases have nonnegative
+sensible energy. Temporarily depleted states retain the original energy-floor
+path. Variable-property zero-flow atmosphere connections also return immediately.
+No conductance, timestep, precision, or physical effect is reduced. Three
+alternating runs per build, requesting 0.25 simulated seconds with the starter
+held throughout and 0.2 speed input, gave these median wall times with timers off:
+
+| Engine / backend | Before | Closed-port shortcut |
+| --- | ---: | ---: |
+| Hayabusa / CPU | 0.918 s | 0.881 s |
+| V12 / CPU | 1.306 s | 1.216 s |
+| Hayabusa / CUDA | 2.366 s | 2.329 s |
+| V12 / CUDA | 1.864 s | 1.794 s |
+
+These are short startup observations under desktop activity. Printed RPMs
+matched. Small changes in thermal/energy outputs and audio remain possible.
+Skipping evaluations can change the cached starting temperature used by later
+numerical inversions; byte-identical full-engine trajectories are not
+claimed. The closed-port regression checks isolated-gas conservation in both
+property modes and retains the negative-energy recovery case.
+
 Configure with `-DENGINE_SIM_CUDA=ON` and an appropriate
 `-DCMAKE_CUDA_ARCHITECTURES=86`. With Visual Studio, if CUDA integration is not
 detected, use a new build directory and pass a toolset such as
@@ -156,7 +200,7 @@ intervals, including their endpoint extensions. Independent species-energy sums
 check the CPU mixture cache across composition changes and temperature boundaries.
 These establish implementation agreement, not agreement with a measured engine.
 
-The selected CPU regression run passed 54 checks, with the CUDA-only comparison
+The selected CPU regression run passed 55 checks, with the CUDA-only comparison
 skipped there and run separately with CUDA enabled. A CPU-only configuration
 also builds without the CUDA toolkit dependency. Both Hayabusa and Ferrari V12
 completed one simulated second on both backends with a half-second starter and

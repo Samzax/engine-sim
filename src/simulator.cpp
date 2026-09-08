@@ -1,4 +1,5 @@
 #include "../include/simulator.h"
+#include "../include/simulation_profile.h"
 #include <stdexcept>
 
 namespace {
@@ -114,6 +115,7 @@ void Simulator::startFrame(double dt) {
 }
 
 bool Simulator::simulateStep() {
+    ENGINE_SIM_PROFILE_SCOPE(Step);
     if (getCurrentIteration() >= simulationSteps()) {
         auto s1 = std::chrono::steady_clock::now();
 

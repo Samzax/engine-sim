@@ -254,6 +254,31 @@ TEST(GasSystemTests, VariableMixtureFlowConservesMassAndEnergy) {
     EXPECT_NEAR(a.n()*a.mix().p_co2+b.n()*b.mix().p_co2, co2, 1e-12);
 }
 
+TEST(GasSystemTests, ClosedPortsPreserveGasAndHandleDepletedEnergy) {
+    for(bool advanced : {false,true}) {
+        GasSystem a,b;
+        a.setVariableProperties(advanced); b.setVariableProperties(advanced);
+        a.initialize(4e5,.001,1500,{.02,.79,.19});
+        b.initialize(1e5,.002,300,{0,.79,.21});
+        const auto originalA=a,originalB=b;
+        GasSystem::FlowParameters closed{0,1e-5,1,0,.002,.002,&a,&b};
+        for(int i=0;i<100;++i) {
+            EXPECT_EQ(GasSystem::flow(closed),0);
+            EXPECT_EQ(a.flow(0,1e-5,1e5,300),0);
+        }
+        for(auto pair : {std::make_pair(&a,&originalA),std::make_pair(&b,&originalB)}) {
+            EXPECT_EQ(pair.first->n(),pair.second->n());
+            EXPECT_EQ(pair.first->totalEnergy(),pair.second->totalEnergy());
+            EXPECT_EQ(pair.first->velocity_x(),pair.second->velocity_x());
+            EXPECT_EQ(pair.first->velocity_y(),pair.second->velocity_y());
+            EXPECT_EQ(pair.first->mix().p_fuel,pair.second->mix().p_fuel);
+        }
+        b.changeEnergy(-b.kineticEnergy()-1);
+        EXPECT_EQ(GasSystem::flow(closed),0);
+        EXPECT_EQ(b.kineticEnergy(),0); // Preserve split-step recovery behavior.
+    }
+}
+
 TEST(GasSystemTests, VariableHeatCapacityWallEnergyBalance) {
     GasSystem gas;
     gas.setVariableProperties(true);

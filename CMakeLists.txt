@@ -17,6 +17,7 @@ endif()
 
 option(DTV "Enable video output" OFF)
 option(ENGINE_SIM_CUDA "Build experimental double-precision CUDA pipe backend" OFF)
+option(ENGINE_SIM_PROFILE "Print inclusive simulation phase timings on thread exit" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
 option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
 
@@ -154,10 +155,17 @@ add_library(engine-sim STATIC
     include/vtec_valvetrain.h
 )
 
+if (ENGINE_SIM_PROFILE)
+    target_compile_definitions(engine-sim PUBLIC ENGINE_SIM_PROFILE)
+endif()
+
 if (ENGINE_SIM_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
     add_library(engine-sim-cuda STATIC src/gpu_pipe.cu)
+    if (ENGINE_SIM_PROFILE)
+        target_compile_definitions(engine-sim-cuda PRIVATE ENGINE_SIM_PROFILE)
+    endif()
     set_target_properties(engine-sim-cuda PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON
         CUDA_RUNTIME_LIBRARY Shared)
     target_compile_options(engine-sim-cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)

@@ -1,4 +1,5 @@
 #include "../include/piston_engine_simulator.h"
+#include "../include/simulation_profile.h"
 
 #include "../include/constants.h"
 #include "../include/units.h"
@@ -310,6 +311,7 @@ void PistonEngineSimulator::placeCylinder(int i) {
 }
 
 void PistonEngineSimulator::simulateStep_() {
+    ENGINE_SIM_PROFILE_SCOPE(Fluid);
     const double timestep = getTimestep();
     IgnitionModule *im = m_engine->getIgnitionModule();
     im->update(timestep);
@@ -332,15 +334,16 @@ void PistonEngineSimulator::simulateStep_() {
     const int intakeCount = m_engine->getIntakeCount();
     const double fluidTimestep = timestep / m_fluidSimulationSteps;
     for (int i = 0; i < m_fluidSimulationSteps; ++i) {
-        for (int j = 0; j < exhaustSystemCount; ++j) {
-            m_engine->getExhaustSystem(j)->process(fluidTimestep);
+        {
+            ENGINE_SIM_PROFILE_SCOPE(Reservoirs);
+            for (int j = 0; j < exhaustSystemCount; ++j) {
+                m_engine->getExhaustSystem(j)->process(fluidTimestep);
+            }
+            for (int j = 0; j < intakeCount; ++j) {
+                m_engine->getIntake(j)->process(fluidTimestep);
+                m_engine->getIntake(j)->m_flowRate += m_engine->getIntake(j)->m_flow;
+            }
         }
-
-        for (int j = 0; j < intakeCount; ++j) {
-            m_engine->getIntake(j)->process(fluidTimestep);
-            m_engine->getIntake(j)->m_flowRate += m_engine->getIntake(j)->m_flow;
-        }
-
         if(m_pipes.empty()) {
             for (int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flow(fluidTimestep);
         } else {
@@ -351,8 +354,14 @@ void PistonEngineSimulator::simulateStep_() {
             while(remaining>0) {
                 if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
                 double h=remaining;
-                for(auto *pipe:m_pipes) h=(std::min)(h,pipe->stableTimestep());
-                for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
+                {
+                    ENGINE_SIM_PROFILE_SCOPE(Cfl);
+                    for(auto *pipe:m_pipes) h=(std::min)(h,pipe->stableTimestep());
+                }
+                {
+                    ENGINE_SIM_PROFILE_SCOPE(Ports);
+                    for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
+                }
                 GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
                 remaining-=h;
             }

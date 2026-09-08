@@ -1,4 +1,5 @@
 #include "../include/gpu_pipe.h"
+#include "../include/simulation_profile.h"
 #include "../include/gas_thermo.h"
 #include <cuda_runtime.h>
 #include <cstdlib>
@@ -218,8 +219,11 @@ void advance(Pipe *pipes,int count,double dt) {
         out.friction=in.friction; out.fuelMass=in.fuelMass; out.timestep=dt;
         std::memcpy(out.u,in.u,in.count*sizeof(in.u[0]));
     }
-    check(cudaGraphLaunch(c.executable,c.stream),"CUDA pipe graph launch");
-    check(cudaStreamSynchronize(c.stream),"CUDA pipe completion");
+    {
+        ENGINE_SIM_PROFILE_SCOPE(DeviceWait);
+        check(cudaGraphLaunch(c.executable,c.stream),"CUDA pipe graph launch");
+        check(cudaStreamSynchronize(c.stream),"CUDA pipe completion");
+    }
     for(int i=0;i<count;++i) {
         if(c.hostError[i]==1) throw std::runtime_error("CUDA pipe exceeded substep limit");
         if(c.hostError[i]) throw std::runtime_error("CUDA pipe positivity failure, diagnostic code "+std::to_string(c.hostError[i]));
