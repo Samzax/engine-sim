@@ -8,7 +8,7 @@ Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed scripts leave the current engine running;
 details are written to `error_log.log` in the working directory.
 
-The package includes the Microsoft release runtime and SDL libraries. A Windows
+The package includes the Microsoft release runtime. A Windows
 x64 PC with DirectX 11 graphics and a working audio output is required.
 
 The GUI also imports `d3dx11_43.dll`, which is not included in this ZIP.
@@ -28,6 +28,7 @@ checkout. Portable packages use their own adjacent assets without that file.
 Developers building Delta's other graphics backends can configure with
 `-DENGINE_SIM_D3D11_ONLY=OFF`; this restores the original device factory and its
 additional runtime dependencies. Engine Sim itself still selects DirectX 11.
+SDL runtime DLLs and their licenses are packaged only with that option disabled.
 
 Startup reuses `assets/assets.ysce` when it is nonempty and at least as recent as
 the source geometry, `assets/assets.dia`. Missing, empty or older compiled files

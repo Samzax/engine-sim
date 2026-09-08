@@ -6,6 +6,7 @@ endif()
 file(GENERATE OUTPUT "$<TARGET_FILE_DIR:engine-sim-app>/delta.conf"
     CONTENT "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic\n${PROJECT_SOURCE_DIR}/assets\n")
 
+if (NOT ENGINE_SIM_D3D11_ONLY)
 get_filename_component(_sdl_lib_dir "${SDL2_LIBRARY}" DIRECTORY)
 get_filename_component(_image_lib_dir "${SDL2_IMAGE_LIBRARY}" DIRECTORY)
 find_file(ENGINE_SIM_SDL_RUNTIME SDL2.dll HINTS "${_sdl_lib_dir}" "${SDL2_DIR}/lib/x64")
@@ -18,22 +19,25 @@ add_custom_command(TARGET engine-sim-app POST_BUILD
         "${ENGINE_SIM_SDL_RUNTIME}" "${ENGINE_SIM_IMAGE_RUNTIME}"
         "$<TARGET_FILE_DIR:engine-sim-app>"
     VERBATIM)
+endif()
 
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME Runtime)
 install(TARGETS engine-sim-app RUNTIME DESTINATION .)
 if (TARGET engine-sim-headless)
     install(TARGETS engine-sim-headless RUNTIME DESTINATION .)
 endif()
-install(FILES "${ENGINE_SIM_SDL_RUNTIME}" "${ENGINE_SIM_IMAGE_RUNTIME}" DESTINATION .)
+if (NOT ENGINE_SIM_D3D11_ONLY)
+    install(FILES "${ENGINE_SIM_SDL_RUNTIME}" "${ENGINE_SIM_IMAGE_RUNTIME}" DESTINATION .)
+    install(FILES "${SDL2_DIR}/COPYING.txt" DESTINATION licenses RENAME SDL2.txt)
+    get_filename_component(_image_root "${_image_lib_dir}/../.." ABSOLUTE)
+    install(FILES "${_image_root}/LICENSE.txt" DESTINATION licenses RENAME SDL2_image.txt)
+endif()
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets" "${PROJECT_SOURCE_DIR}/es" DESTINATION .)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/fonts"
     "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/shaders" DESTINATION engine)
 install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION .)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/portable-release.md" DESTINATION . RENAME README.md)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/headless.md" DESTINATION .)
-install(FILES "${SDL2_DIR}/COPYING.txt" DESTINATION licenses RENAME SDL2.txt)
-get_filename_component(_image_root "${_image_lib_dir}/../.." ABSOLUTE)
-install(FILES "${_image_root}/LICENSE.txt" DESTINATION licenses RENAME SDL2_image.txt)
 foreach(_dependency delta-studio csv-io simple-2d-constraint-solver)
     install(FILES "${PROJECT_SOURCE_DIR}/dependencies/submodules/${_dependency}/LICENSE"
         DESTINATION licenses RENAME "${_dependency}.txt")
