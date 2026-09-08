@@ -43,18 +43,40 @@ Repeat the build/test commands with `Release`. The setup script downloads fixed 
 
 Discord Rich Presence remains available in Release. Debug builds omit it because the bundled RPC library was built against the Release C++ runtime.
 
-## Local validation (2026-09-08)
+## Initial validation (2026-09-08, historical)
 
 - Windows x64 Debug and Release: application and both project test executables built in each configuration; 29/29 project tests passed in each.
 - WSL GCC: the final portable audio suite passed separately under AddressSanitizer + UndefinedBehaviorSanitizer and ThreadSanitizer, with no sanitizer diagnostics.
-- The Hayabusa/V12 integration checks exercise script compilation, brief simulation, frequency changes, and repeated cleanup. No graphical/audio-device smoke test or remote GitHub Actions run has been performed.
+- The Hayabusa/V12 integration checks exercise script compilation, brief simulation, frequency changes, and repeated cleanup. GUI and remote CI verification were added subsequently; see the current verification scope below.
+
+## Current verification scope (2026-09-08)
+
+- The isolated Windows desktop runner exercises the real GUI with muted audio,
+  including minimize/restore, a successful reload, a failed reload preserving
+  the engine, rendering and shutdown. Debug at `8a34f03` and subsequent Release
+  builds passed. It never switches the user's desktop. See `gui-check.md`.
+- The clean portable package at `a1c60531` passed the same GUI check after
+  extraction. A copied script with a zero gear ratio produced the expected
+  validation error in the packaged GUI; the copied script was restored.
+- All 31 selected Debug gas, curve, synthesizer and simulator tests passed at
+  `8a34f03`. After the road-drag fix, all five Release simulator regression tests
+  passed, including matching deceleration for both rotation directions.
+- All 20 bundled runnable engines passed loading and 0.05-second headless runs
+  with vehicle/transmission validation enabled. These runs establish startup
+  compatibility, not sustained combustion or stable idle.
+- DirectSound buffer upload/readback passed separately in Debug and Release;
+  see `audio-device-check.md`. Audible quality, device disconnection/recovery,
+  GPU removal/reset and actual FFmpeg encoding remain unverified. These limits
+  do not prevent normal background GUI checks.
+- Remote CI results belong to individual commits. Local checks and a previous
+  successful CI run do not establish that the latest pushed revision is green.
 
 ## Portable launch and packaging follow-up
 
 - Application assets default to folders beside the executable; development builds generate an absolute `delta.conf`. Script compilation now uses the configured asset directory and an explicit script-library path.
 - The existing integration checks now execute from the build directory, using absolute fixture/library paths. Debug and Release both passed all 29 checks after this change.
 - Registered generated impulse responses with their engine context so repeated uses share the response and engine cleanup releases it.
-- CPack builds a Release ZIP containing runtime DLLs, assets, scripts, fonts, shaders, and license files. The local archive was generated and its entries checked; the graphical launch check was interrupted by the user and remains unverified.
+- CPack builds a Release ZIP containing runtime DLLs, assets, scripts, fonts, shaders, and license files. Extracted packages have since passed the isolated GUI launch check described above.
 - CI runs on fix branches and uploads the Release ZIP. See `portable-release.md` for packaging commands.
 
 ## Curve reuse follow-up
@@ -78,13 +100,14 @@ and asset initialization results, and returned audio buffer/source pointers.
 Failures display a dialog and append details to `error_log.log`, then terminate
 with a failure status. This intentionally avoids calling the bundled graphics
 engine's cleanup on partially initialized state; Windows reclaims resources on
-process exit. Both Windows application configurations build. Dialog behavior and
-hardware failure paths remain unverified because desktop control is paused.
+process exit. Both Windows application configurations build. The isolated GUI
+runner suppresses modal dialogs and checks error exits through logs. Visible
+dialog behavior and hardware failure paths remain unverified.
 
 Audio-device uploads now check lock/unlock results, skip empty segments, and only
 advance the write position after a successful upload. A failed lock previously
 left pointer/length outputs unchecked before copying into them. Both application
-configurations build; real device-loss recovery still needs desktop verification.
+configurations build; real device-loss recovery remains unverified.
 
 The pinned Delta Studio backend also passed sample counts as byte counts to
 DirectSound's segmented `Unlock` call. `cmake/DeltaAudioFix.cmake` converts both
