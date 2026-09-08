@@ -1362,7 +1362,19 @@ void EngineSimApplication::startRecording(bool hardwareEncoding) {
         m_infoCluster->setLogMessage("Cannot create video_capture folder; see error_log.log");
         return;
     }
-    settings.fname = (outputDirectory / "engine_sim_video_capture.mp4").string();
+    std::filesystem::path outputPath = outputDirectory / "engine_sim_video_capture.mp4";
+    unsigned long long suffix = 1;
+    while (std::filesystem::exists(outputPath, directoryError)) {
+        outputPath = outputDirectory / ("engine_sim_video_capture_"
+            + std::to_string(suffix++) + ".mp4");
+    }
+    if (directoryError) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Cannot select video capture filename: " << directoryError.message() << '\n';
+        m_infoCluster->setLogMessage("Cannot select recording filename; see error_log.log");
+        return;
+    }
+    settings.fname = outputPath.string();
     settings.inputWidth = m_engine.GetScreenWidth();
     settings.inputHeight = m_engine.GetScreenHeight();
     // YUV420 video needs even output dimensions; window client sizes need not be.
@@ -1375,6 +1387,7 @@ void EngineSimApplication::startRecording(bool hardwareEncoding) {
     m_recordingHardware = hardwareEncoding;
     m_encoder.run(settings, 2);
     m_recording = true;
+    m_infoCluster->setLogMessage("Recording to " + settings.fname);
 #else
     m_infoCluster->setLogMessage("Video recording is unavailable in this build");
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
