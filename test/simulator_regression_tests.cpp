@@ -131,7 +131,9 @@ TEST(SimulatorRegression, MixtureGaugesUseConfiguredFuelMass) {
     fuel.molecularMass = units::mass(100, units::g);
     engine.getFuel()->initialize(fuel);
     const double initialAfr = engine.getIntakeAfr();
-    EXPECT_GT(initialAfr, 0);
+    // Per mole of mixture: 6.39976 g oxygen + 19.6098 g inert gas,
+    // divided by 10 g of the configured fuel.
+    EXPECT_NEAR(initialAfr, 2.600956, 1e-9);
     EXPECT_NEAR(engine.getExhaustO2(), 0.1777239155, 1e-9);
     fuel.molecularMass *= 2;
     engine.getFuel()->initialize(fuel);

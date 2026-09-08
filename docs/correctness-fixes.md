@@ -197,3 +197,12 @@ wrap. Previously, a step spanning that boundary skipped events just before
 the wrap by shifting every event into the next cycle. Reverse rotation had
 the corresponding error. A regression reproduces both missed sparks and
 checks that the corrected events do not fire again on the following step.
+
+### Mixture gauges
+
+Intake AFR now uses the tracked oxygen and inert-gas masses, with the model's
+nitrogen approximation for inert gas, and the configured fuel molecular mass.
+The old oxygen-only conversion assumed a different oxygen fraction from the
+intake supply and overstated the ratio. Exhaust oxygen uses the same configured
+fuel mass and reports oxygen even when no unburned fuel remains. These changes
+correct the displayed mixture values; the combustion model remains an approximation.

@@ -329,22 +329,21 @@ double Engine::getManifoldPressure() const {
 }
 
 double Engine::getIntakeAfr() const {
+    double totalInert = 0.0;
     double totalOxygen = 0.0;
     double totalFuel = 0.0;
     for (int i = 0; i < m_intakeCount; ++i) {
+        totalInert += m_intakes[i].m_system.n_inert();
         totalOxygen += m_intakes[i].m_system.n_o2();
         totalFuel += m_intakes[i].m_system.n_fuel();
     }
 
     constexpr double oxygenMolarMass = units::mass(31.9988, units::g);
+    constexpr double nitrogenMolarMass = units::mass(28.014, units::g);
 
     const double fuelMass = totalFuel * m_fuel.getMolecularMass();
-    if (fuelMass <= 0) return 0;
-    else {
-        return
-            (oxygenMolarMass * totalOxygen / 0.21)
-            / fuelMass;
-    }
+    const double airMass = oxygenMolarMass * totalOxygen + nitrogenMolarMass * totalInert;
+    return fuelMass > 0 ? airMass / fuelMass : 0;
 }
 
 double Engine::getExhaustO2() const {
