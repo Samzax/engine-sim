@@ -989,12 +989,8 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage("[N] - Set simulation freq to " + std::to_string(m_simulator->getSimulationFrequency()));
     }
     else if (m_engine.IsKeyDown(ysKey::Code::G) && m_simulator->m_dyno.m_hold) {
-        if (mouseWheelDelta > 0) {
-            m_dynoSpeed += m_iceEngine->getDynoHoldStep();
-        }
-        else if (mouseWheelDelta < 0) {
-            m_dynoSpeed -= m_iceEngine->getDynoHoldStep();
-        }
+        m_dynoSpeed += (static_cast<double>(mouseWheelDelta) / WHEEL_DELTA)
+            * m_iceEngine->getDynoHoldStep();
 
         m_dynoSpeed = clamp(m_dynoSpeed, m_iceEngine->getDynoMinSpeed(), m_iceEngine->getDynoMaxSpeed());
 
