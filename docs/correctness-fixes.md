@@ -264,3 +264,10 @@ dragging, or multi-mouse behavior on real input devices.
 F1/F2 camera rotation no longer imposes a minimum 5 ms per frame, which made
 rotation faster above 200 FPS. It still caps long frames to avoid a jump after a
 stall. This camera change does not alter the physics timestep.
+
+Gear shifting consumes both Up and Down transitions each frame. Previously,
+an Up press skipped checking Down, leaving a simultaneous downshift pending
+until the next frame. Opposing requests now cancel. A standalone check with
+the actual keyboard class reproduced requests of `+1, -1` on successive polls
+before the change and `0, 0` afterward, without sending OS input. The Release
+application build passed; this check does not exercise physical key presses.

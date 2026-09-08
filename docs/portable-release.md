@@ -5,8 +5,12 @@ Keep the DLLs, `assets`, `es`, and `engine` folders beside it. The application
 needs no installer, but the graphics runtime requirements below still apply.
 
 Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
-in the simulator to reload it. Failed scripts leave the current engine running;
-details are written to `error_log.log` in the working directory.
+in the simulator to reload it. Failed reloads leave the current engine running.
+If the initial script fails, the status instead says no engine is loaded.
+Details are written to `error_log.log` in the working directory.
+
+Press Up Arrow or Down Arrow to shift gears. Opposing shift presses received
+in the same frame cancel each other, without queuing a shift for the next frame.
 
 Hold 1 through 5 for progressively slower simulation, down to 1/1000 speed.
 Release the key to return to normal speed. Fractional physics steps are retained
