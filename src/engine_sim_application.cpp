@@ -1068,9 +1068,12 @@ void EngineSimApplication::processEngineInput() {
                 m_dynoSpeed *= (1 / (1 + dt));
             }
 
-            if (m_dynoSpeed > m_iceEngine->getRedline()) {
+            const double sweepLimit = (std::min)(
+                m_iceEngine->getRedline(), m_iceEngine->getDynoMaxSpeed());
+            if (m_dynoSpeed > sweepLimit) {
                 m_simulator->m_dyno.m_enabled = false;
                 m_dynoSpeed = units::rpm(0);
+                m_infoCluster->setLogMessage("Dyno sweep completed");
             }
         }
     }
