@@ -20,7 +20,9 @@ off the input desktop. It waits up to 45 seconds, terminating only its diagnosti
 child on timeout. The app accepts the internal diagnostic flag only on a desktop
 whose name starts with `EngineSimCheck_`. It mutes audio before playback, skips
 Discord initialization, runs 120 frame-loop iterations, and performs normal
-shutdown. A successful run writes `gui-check.txt` in the working directory.
+shutdown. A successful run writes `gui-check.txt` and exports its final render
+target as `gui-check.bmp` in the working directory. The image comes from the
+application's GPU texture, not from a desktop screenshot.
 At frame 40 it reloads the configured engine through the normal reload and audio
 stop/restart path. At frame 80 it deliberately attempts to compile the assets
 directory as a script and verifies that the current simulator survives. This
@@ -33,8 +35,10 @@ pending marker before initialization. Startup failures are recorded in
 `error_log.log` and diagnostic mode exits without displaying a modal dialog.
 
 Debug and packaged Release passed on the development PC on 2026-09-08. This exercises real GUI,
-graphics and audio initialization and the rendering loop. It does not verify
-visible pixels, user interaction or audible output. An off-screen swap chain can
+graphics and audio initialization and the rendering loop. The Release frame
+export was inspected for the engine drawing, gauges and labels; it also exposed
+and verified a fix for the long reload-error message overflowing its panel.
+This does not verify user interaction or audible output. An off-screen swap chain can
 be occluded. Failed Direct3D Present calls now propagate to the application's
 frame check and log their HRESULT (plus the removal reason for a reset or removed
 device). Non-failure statuses such as occlusion remain accepted. Actual device

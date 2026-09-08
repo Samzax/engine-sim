@@ -102,10 +102,16 @@ void InfoCluster::render() {
     const Bounds infoMessagesBounds = grid.get(m_bounds, 0, 3, 6, 1);
     drawFrame(infoMessagesBounds, 1.0f, m_app->getForegroundColor(), m_app->getBackgroundColor());
 
+    const Bounds messageBounds = infoMessagesBounds.inset(10.0f);
+    float messageSize = 24.0f;
+    const float messageWidth = m_app->getTextRenderer()->CalculateWidth(m_logMessage, messageSize);
+    if (messageWidth > messageBounds.width() && messageWidth > 0)
+        messageSize *= messageBounds.width() / messageWidth;
+
     drawAlignedText(
         m_logMessage,
-        infoMessagesBounds.inset(10.0f),
-        24.0f,
+        messageBounds,
+        messageSize,
         Bounds::lm,
         Bounds::lm);
 }

@@ -62,6 +62,36 @@ void checkFrame(ysError error, const char *stage) {
             + "). See error_log.log for graphics error details.", false);
     }
 }
+
+void saveDiagnosticFrame(dbasic::DeltaEngine &engine) {
+    ysRenderTarget *target = engine.GetScreenRenderTarget();
+    const int width = target->GetWidth(), height = target->GetHeight();
+    if (width <= 0 || height <= 0)
+        startupFailure("Diagnostic render target has invalid dimensions.");
+    std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * 4);
+    checkFrame(engine.GetDevice()->ReadRenderTarget(target, pixels.data()), "Read diagnostic frame");
+    // Direct3D returns top-down RGBA; a 32-bit BMP stores top-down BGRA when
+    // its height is negative. This exports only the application's render target.
+    for (size_t i = 0; i < pixels.size(); i += 4) std::swap(pixels[i], pixels[i + 2]);
+    BITMAPFILEHEADER fileHeader{};
+    BITMAPINFOHEADER bitmapHeader{};
+    fileHeader.bfType = 0x4d42;
+    fileHeader.bfOffBits = sizeof(fileHeader) + sizeof(bitmapHeader);
+    fileHeader.bfSize = fileHeader.bfOffBits + static_cast<DWORD>(pixels.size());
+    bitmapHeader.biSize = sizeof(bitmapHeader);
+    bitmapHeader.biWidth = width;
+    bitmapHeader.biHeight = -height;
+    bitmapHeader.biPlanes = 1;
+    bitmapHeader.biBitCount = 32;
+    bitmapHeader.biCompression = BI_RGB;
+    bitmapHeader.biSizeImage = static_cast<DWORD>(pixels.size());
+    std::ofstream image("gui-check.bmp", std::ios::binary | std::ios::trunc);
+    image.write(reinterpret_cast<const char *>(&fileHeader), sizeof(fileHeader));
+    image.write(reinterpret_cast<const char *>(&bitmapHeader), sizeof(bitmapHeader));
+    image.write(reinterpret_cast<const char *>(pixels.data()), pixels.size());
+    image.close();
+    if (!image) startupFailure("Could not write gui-check.bmp.");
+}
 }
 
 void EngineSimApplication::setDiagnosticMode() {
@@ -499,6 +529,7 @@ void EngineSimApplication::run(int maxFrames) {
         renderScene();
 
         checkFrame(m_engine.EndFrame(), "Render frame");
+        if (m_diagnosticMode && frames == maxFrames - 1) saveDiagnosticFrame(m_engine);
         if (maxFrames > 0 && ++frames >= maxFrames) break;
 
         if (isRecording()) {
