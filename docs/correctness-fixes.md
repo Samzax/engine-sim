@@ -85,3 +85,11 @@ Audio-device uploads now check lock/unlock results, skip empty segments, and onl
 advance the write position after a successful upload. A failed lock previously
 left pointer/length outputs unchecked before copying into them. Both application
 configurations build; real device-loss recovery still needs desktop verification.
+
+The pinned Delta Studio backend also passed sample counts as byte counts to
+DirectSound's segmented `Unlock` call. `cmake/DeltaAudioFix.cmake` converts both
+segment lengths using the existing audio-format helper, matching the backend's
+whole-buffer unlock. It compiles a patched build-directory copy, leaves the
+submodule clean, and fails configuration if the expected upstream source changes
+so the patch must be reviewed. Debug and Release compile the generated source;
+actual device playback remains unverified under the background-only constraint.
