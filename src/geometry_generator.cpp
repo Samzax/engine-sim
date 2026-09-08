@@ -842,8 +842,8 @@ bool GeometryGenerator::startPath(PathParameters &params) {
     const float dy = p2[i1].y - params.p0[0].y;
     const float length = std::sqrt(dx * dx + dy * dy);
 
-    const float dir_x = dx / length;
-    const float dir_y = dy / length;
+    const float dir_x = (length > 0) ? dx / length : 1.0f;
+    const float dir_y = (length > 0) ? dy / length : 0.0f;
 
     const float perp_x = -dir_y;
     const float perp_y = dir_x;
@@ -917,8 +917,8 @@ bool GeometryGenerator::generatePathSegment(PathParameters &params, bool detache
     const float dy1 = p1[i1].y - p0[i0].y;
     const float length = std::sqrt(dx1 * dx1 + dy1 * dy1);
 
-    const float dir_x = dx1 / length;
-    const float dir_y = dy1 / length;
+    const float dir_x = (length > 0) ? dx1 / length : params.pdir_x;
+    const float dir_y = (length > 0) ? dy1 / length : params.pdir_y;
 
     float perp_x = -dir_y - params.pdir_y;
     float perp_y = dir_x + params.pdir_x;
