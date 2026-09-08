@@ -420,3 +420,12 @@ The fuel panel labels its dollar total as an estimate and displays the fixed
 assumption of $4.761 USD per US gallon beneath it. The calculation is unchanged;
 the rate is not a live fuel price. The Release build and isolated GUI check
 passed, and the captured frame confirmed the labels fit the fuel panel.
+
+### Dyno graph smoothing
+
+Torque and power graph smoothing uses elapsed time instead of a fixed 5 percent
+blend per rendered frame. Its response at 60 FPS is preserved. A constant-input
+calculation over half a second reached 53.67 percent at 30 FPS, 78.54 percent at
+60 FPS, and 99.79 percent at 240 FPS before the change; the new filter reached
+78.54 percent at all three rates. The Release application built successfully.
+Graph sampling frequency and the underlying simulated torque are unchanged.

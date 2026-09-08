@@ -3,6 +3,7 @@
 #include "../include/engine_sim_application.h"
 
 #include <sstream>
+#include <cmath>
 
 OscilloscopeCluster::OscilloscopeCluster() {
     m_simulator = nullptr;
@@ -238,8 +239,9 @@ void OscilloscopeCluster::update(float dt) {
         ? (units::convert(m_simulator->getDynoPower(), units::kW))
         : (units::convert(m_simulator->getDynoPower(), units::hp));
 
-    m_torque = m_torque * 0.95 + 0.05 * torque;
-    m_power = m_power * 0.95 + 0.05 * power;
+    const double retention = std::pow(0.95, 60.0 * std::fmax(dt, 0.0f));
+    m_torque = m_torque * retention + (1.0 - retention) * torque;
+    m_power = m_power * retention + (1.0 - retention) * power;
 
     Engine *engine = m_simulator->getEngine();
     if (engine != nullptr) {
