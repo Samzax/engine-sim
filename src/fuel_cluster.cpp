@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 
 FuelCluster::FuelCluster() {
     m_engine = nullptr;
@@ -66,23 +67,31 @@ void FuelCluster::render() {
     const double travelledDistance = (m_simulator->getVehicle() != nullptr)
         ? m_simulator->getVehicle()->getTravelledDistance()
         : 0.0;
-    const double mpg = units::convert(travelledDistance, units::mile) / fuelConsumed_gallons;
+    const bool hasEconomyData = std::isfinite(travelledDistance)
+        && std::isfinite(fuelConsumed_gallons)
+        && travelledDistance > 0.0 && fuelConsumed_gallons > 0.0;
 
     ss = std::stringstream();
     ss << std::setprecision(2) << std::fixed;
-    ss << mpg << " MPG";
+    if (hasEconomyData) {
+        ss << units::convert(travelledDistance, units::mile) / fuelConsumed_gallons;
+    }
+    else ss << "--";
+    ss << " MPG";
 
     const Bounds mpgBounds = grid.get(bodyBounds, 0, 6);
     drawText(ss.str(), mpgBounds, 16.0f, Bounds::lm);
 
-    const double lp100km = (travelledDistance != 0)
-        ? units::convert(fuelConsumed, units::L)
-            / (units::convert(travelledDistance, units::km) / 100.0)
-        : 0;
-
     ss = std::stringstream();
     ss << std::setprecision(2) << std::fixed;
-    ss << ((lp100km > 100.0) ? 100.0 : lp100km) << " L/100 KM";
+    if (hasEconomyData) {
+        const double lp100km = units::convert(fuelConsumed, units::L)
+            / (units::convert(travelledDistance, units::km) / 100.0);
+        if (lp100km > 100.0) ss << ">100";
+        else ss << lp100km;
+    }
+    else ss << "--";
+    ss << " L/100 KM";
 
     const Bounds lp100kmBounds = grid.get(bodyBounds, 0, 7);
     drawText(ss.str(), lp100kmBounds, 12.0f, Bounds::lm);
