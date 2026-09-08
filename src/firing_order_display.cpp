@@ -7,6 +7,7 @@
 #include "../include/ui_utilities.h"
 
 #include <sstream>
+#include <cmath>
 
 #undef min
 
@@ -42,12 +43,16 @@ void FiringOrderDisplay::update(float dt) {
             memset(m_cylinderLit, 0, sizeof(float) * m_cylinderCount);
         }
 
+        // Preserve the 60 FPS response while applying it over elapsed time.
+        const float framesAt60Hz = 60.0f * std::fmax(dt, 0.0f);
+        const float riseRetention = std::pow(0.95f, framesAt60Hz);
+        const float fadeRetention = std::pow(0.625f, framesAt60Hz);
         for (int i = 0; i < m_cylinderCount; ++i) {
             if (m_engine->getChamber(i)->popLitLastFrame() || m_engine->getChamber(i)->isLit()) {
-                m_cylinderLit[i] = 0.05f + 0.95f * m_cylinderLit[i];
+                m_cylinderLit[i] = 1.0f - riseRetention + riseRetention * m_cylinderLit[i];
             }
             else {
-                m_cylinderLit[i] *= (dt / (dt + 0.01f));
+                m_cylinderLit[i] *= fadeRetention;
             }
         }
     }
