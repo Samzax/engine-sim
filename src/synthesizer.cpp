@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
+#include <limits>
 
 #undef min
 #undef max
@@ -203,6 +204,9 @@ void Synthesizer::writeInput(const double *data) {
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         RingBuffer<float> &buffer = m_inputChannels[i].data;
+        // Reject bad physics samples before they poison recursive filter state.
+        const double input = std::isfinite(data[i])
+            && std::abs(data[i]) <= std::numeric_limits<float>::max() ? data[i] : 0.0;
         const double lastInputSample = m_inputChannels[i].lastInputSample;
         const size_t baseIndex = buffer.writeIndex();
         const double distance =
@@ -214,7 +218,7 @@ void Synthesizer::writeInput(const double *data) {
             if (s >= m_inputBufferSize) s -= m_inputBufferSize;
 
             const double f = s / distance;
-            const double sample = lastInputSample * (1 - f) + data[i] * f;
+            const double sample = lastInputSample * (1 - f) + input * f;
 
             // RingBuffer drops its oldest sample on overflow. Keep the count of
             // committed (renderable) samples consistent with that policy.
@@ -224,7 +228,7 @@ void Synthesizer::writeInput(const double *data) {
             buffer.write(m_filters[i].antialiasing.fast_f(static_cast<float>(sample)));
         }
 
-        m_inputChannels[i].lastInputSample = data[i];
+        m_inputChannels[i].lastInputSample = input;
     }
 
     m_lastInputSampleOffset = m_inputWriteOffset;
