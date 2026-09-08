@@ -10,6 +10,8 @@
 #include <assert.h>
 #include <vector>
 #include <memory>
+#include <limits>
+#include <stdexcept>
 
 Engine::Engine() {
     m_name = "";
@@ -397,11 +399,22 @@ int Engine::getMaxDepth() const {
 }
 
 Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission) {
+    if (vehicle == nullptr || transmission == nullptr)
+        throw std::invalid_argument("Engine requires a vehicle and transmission");
+    if (getCrankshaftCount() <= 0 || getCylinderCount() <= 0
+        || getCylinderBankCount() <= 0 || getExhaustSystemCount() <= 0
+        || getIntakeCount() <= 0)
+        throw std::invalid_argument("Engine requires crankshafts, cylinders, banks, exhausts and intakes");
+    const double frequency = getSimulationFrequency();
+    if (!std::isfinite(frequency) || frequency < 1
+        || frequency > (std::numeric_limits<int>::max)())
+        throw std::invalid_argument("Engine simulation frequency must be finite and within 1..INT_MAX");
+
     auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;
     simulator->initialize(simulatorParams);
-    simulator->setSimulationFrequency(getSimulationFrequency());
+    simulator->setSimulationFrequency(static_cast<int>(frequency));
 
     simulator->loadSimulation(this, vehicle, transmission);
     simulator->setFluidSimulationSteps(8);

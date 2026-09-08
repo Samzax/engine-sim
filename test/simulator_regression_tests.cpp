@@ -2,6 +2,8 @@
 #include "../scripting/include/compiler.h"
 #include "../include/simulator.h"
 #include <memory>
+#include <limits>
+#include <stdexcept>
 
 namespace {
 struct EngineOwner {
@@ -12,6 +14,21 @@ struct EngineOwner {
         delete output.transmission;
     }
 };
+}
+
+TEST(SimulatorRegression, InvalidEngineRejectedBeforeSimulatorInitialization) {
+    Vehicle vehicle;
+    Transmission transmission;
+    Engine engine;
+    EXPECT_THROW(engine.createSimulator(&vehicle, &transmission), std::invalid_argument);
+
+    Engine::Parameters params{};
+    params.crankshaftCount = params.cylinderCount = params.cylinderBanks = 1;
+    params.exhaustSystemCount = params.intakeCount = 1;
+    params.initialSimulationFrequency = std::numeric_limits<double>::infinity();
+    engine.initialize(params);
+    EXPECT_THROW(engine.createSimulator(&vehicle, &transmission), std::invalid_argument);
+    engine.destroy();
 }
 
 TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {

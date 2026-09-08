@@ -16,7 +16,6 @@
 #include "../include/piston_engine_simulator.h"
 #include "../include/wave_reader.h"
 #include <memory>
-#include <limits>
 #include <fstream>
 #include <filesystem>
 
@@ -549,14 +548,9 @@ bool EngineSimApplication::loadEngine(
     Vehicle *vehicle,
     Transmission *transmission)
 {
-    if (engine == nullptr || vehicle == nullptr || transmission == nullptr
-        || engine->getCrankshaftCount() <= 0 || engine->getCylinderCount() <= 0
-        || engine->getCylinderBankCount() <= 0 || engine->getExhaustSystemCount() <= 0
-        || engine->getIntakeCount() <= 0 || !std::isfinite(engine->getSimulationFrequency())
-        || engine->getSimulationFrequency() < 1
-        || engine->getSimulationFrequency() > (std::numeric_limits<int>::max)()) {
+    if (engine == nullptr) {
         std::ofstream log("error_log.log", std::ios::app);
-        log << "Invalid engine: check component counts and simulation frequency.\n";
+        log << "No engine was provided.\n";
         return false;
     }
 
