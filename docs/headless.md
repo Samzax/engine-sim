@@ -15,6 +15,10 @@ optional starter duration (default 1 second), and optional throttle (default
 defaults. Relative paths are resolved from the caller's directory; absolute
 paths allow running from elsewhere.
 
+Numeric arguments must be finite numbers; decimal and scientific notation are
+accepted. Unit suffixes and trailing text are rejected (`0.01` seconds is valid,
+`10ms` is not). Invalid arguments are rejected before opening the output WAV.
+
 A final optional argument records the generated samples as mono 44,100 Hz PCM16:
 
 ```powershell
