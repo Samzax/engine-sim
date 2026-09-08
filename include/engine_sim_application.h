@@ -166,6 +166,7 @@ class EngineSimApplication {
         int m_screenResolutionIndex;
         bool m_recording;
         bool m_recordingHardware = true;
+        std::string m_recordingPath;
 
         ysVector m_background;
         ysVector m_foreground;

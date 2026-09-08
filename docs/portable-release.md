@@ -57,7 +57,10 @@ Video recording is optional and disabled in the default build. In builds made
 with `DTV=ON`, Insert starts or stops recording. The app creates `video_capture`
 in its working directory and writes `engine_sim_video_capture.mp4` there.
 If that name exists, it selects the first available numbered name, such as
-`engine_sim_video_capture_1.mp4`, preserving earlier recordings. Folder creation errors are
+`engine_sim_video_capture_1.mp4`, preserving earlier recordings. The status panel
+shows the chosen filename when recording starts and when the video is saved.
+Successful saves also write the full output path to `error_log.log`.
+Folder creation errors are
 reported in the status panel and `error_log.log`. Odd window dimensions are
 scaled down by at most one pixel per axis for H.264 output. If the hardware
 encoder cannot initialize, recording retries with software encoding.

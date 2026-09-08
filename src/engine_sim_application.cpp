@@ -1353,9 +1353,10 @@ void EngineSimApplication::startRecording(bool hardwareEncoding) {
     if (m_recording || !readyToRecord()) return;
     atg_dtv::Encoder::VideoSettings settings{};
 
-    const std::filesystem::path outputDirectory("video_capture");
     std::error_code directoryError;
-    std::filesystem::create_directories(outputDirectory, directoryError);
+    const std::filesystem::path outputDirectory =
+        std::filesystem::absolute("video_capture", directoryError);
+    if (!directoryError) std::filesystem::create_directories(outputDirectory, directoryError);
     if (directoryError) {
         std::ofstream log("error_log.log", std::ios::app);
         log << "Cannot create video capture directory: " << directoryError.message() << '\n';
@@ -1387,7 +1388,8 @@ void EngineSimApplication::startRecording(bool hardwareEncoding) {
     m_recordingHardware = hardwareEncoding;
     m_encoder.run(settings, 2);
     m_recording = true;
-    m_infoCluster->setLogMessage("Recording to " + settings.fname);
+    m_recordingPath = settings.fname;
+    m_infoCluster->setLogMessage("Recording: " + outputPath.filename().string());
 #else
     m_infoCluster->setLogMessage("Video recording is unavailable in this build");
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
@@ -1429,7 +1431,10 @@ void EngineSimApplication::stopRecording() {
         m_infoCluster->setLogMessage("Video recording failed; see error_log.log");
     }
     else {
-        m_infoCluster->setLogMessage("Video recording saved in video_capture");
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Video saved: " << m_recordingPath << '\n';
+        m_infoCluster->setLogMessage("Video saved: "
+            + std::filesystem::path(m_recordingPath).filename().string());
     }
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
 }
@@ -1444,7 +1449,10 @@ void EngineSimApplication::recordFrame() {
         stopRecording();
         if (retrySoftware) {
             startRecording(false);
-            m_infoCluster->setLogMessage("Hardware encoder unavailable; using software video encoding");
+            if (m_recording) {
+                m_infoCluster->setLogMessage("Software recording: "
+                    + std::filesystem::path(m_recordingPath).filename().string());
+            }
             std::ofstream log("error_log.log", std::ios::app);
             log << "Hardware video encoder unavailable; retrying with software encoding.\n";
             return;
