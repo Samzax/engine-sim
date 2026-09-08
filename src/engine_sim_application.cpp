@@ -1025,6 +1025,10 @@ void EngineSimApplication::processEngineInput() {
     m_speedSetting = m_targetSpeedSetting * 0.5 + 0.5 * m_speedSetting;
 
     m_iceEngine->setSpeedControl(m_speedSetting);
+    if (m_engine.ProcessKeyDown(ysKey::Code::Home)) {
+        m_engineView->fitEngine(m_iceEngine);
+        m_infoCluster->setLogMessage("[Home] - Fit engine view");
+    }
     if (m_engine.ProcessKeyDown(ysKey::Code::M)) {
         const int currentLayer = getViewParameters().Layer0;
         if (currentLayer + 1 < m_iceEngine->getMaxDepth()) {

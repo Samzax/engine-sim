@@ -8,6 +8,9 @@ Choose an engine by editing the engine import in `assets/main.mr`. Press Enter
 in the simulator to reload it. Failed scripts leave the current engine running;
 details are written to `error_log.log` in the working directory.
 
+The initial view fits the engine automatically. After panning or zooming,
+press Home to fit it again without restarting the simulation.
+
 The build label and `build-info.txt` identify the Git revision used for the app.
 Include that revision in bug reports. A `dirty` suffix marks a build made with
 local changes; source archives without Git metadata show `unknown`.
