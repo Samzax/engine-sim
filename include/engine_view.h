@@ -3,6 +3,8 @@
 
 #include "ui_element.h"
 
+class Engine;
+
 class EngineView : public UiElement {
     public:
         EngineView();
@@ -16,6 +18,7 @@ class EngineView : public UiElement {
 
         void setDrawFrame(bool drawFrame) { m_drawFrame = drawFrame; }
         void setBounds(const Bounds &bounds);
+        void fitEngine(Engine *engine);
 
         Point getCenter() const;
 
@@ -27,6 +30,9 @@ class EngineView : public UiElement {
         Point m_dragStart;
         int m_lastScroll;
         bool m_drawFrame;
+        bool m_fitPending = false;
+        Point m_engineMin;
+        Point m_engineMax;
 };
 
 #endif /* ATG_ENGINE_SIM_ENGINE_VIEW_H */

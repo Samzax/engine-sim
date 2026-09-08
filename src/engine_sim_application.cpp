@@ -1166,9 +1166,6 @@ void EngineSimApplication::renderScene() {
     const int screenHeight = m_engine.GetGameWindow()->GetGameHeight();
     const float aspectRatio = screenWidth / (float)screenHeight;
 
-    const Point cameraPos = m_engineView->getCameraPosition();
-    m_shaders.m_cameraPosition = ysMath::LoadVector(cameraPos.x, cameraPos.y);
-
     m_shaders.CalculateUiCamera(screenWidth, screenHeight);
 
     if (m_screen == 0) {
@@ -1240,6 +1237,8 @@ void EngineSimApplication::renderScene() {
         m_infoCluster->setVisible(false);
     }
 
+    const Point cameraPos = m_engineView->getCameraPosition();
+    m_shaders.m_cameraPosition = ysMath::LoadVector(cameraPos.x, cameraPos.y);
     const float cameraAspectRatio =
         m_engineView->m_bounds.width() / m_engineView->m_bounds.height();
     m_engine.GetDevice()->ResizeRenderTarget(
@@ -1284,6 +1283,7 @@ void EngineSimApplication::refreshUserInterface() {
     m_uiManager.initialize(this);
 
     m_engineView = m_uiManager.getRoot()->addElement<EngineView>();
+    m_engineView->fitEngine(m_iceEngine);
     m_rightGaugeCluster = m_uiManager.getRoot()->addElement<RightGaugeCluster>();
     m_oscCluster = m_uiManager.getRoot()->addElement<OscilloscopeCluster>();
     m_performanceCluster = m_uiManager.getRoot()->addElement<PerformanceCluster>();
