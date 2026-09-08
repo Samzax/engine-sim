@@ -40,6 +40,10 @@ namespace es_script {
             m_lobes.push_back(lobeCenterline);
         }
 
+        bool hasLobesForCylinders(int count) const {
+            return m_lobes.size() >= static_cast<size_t>(count);
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("advance", &m_parameters.advance);

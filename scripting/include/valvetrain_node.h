@@ -13,6 +13,7 @@ namespace es_script {
         virtual ~ValvetrainNode() { /* void */ }
 
         virtual Valvetrain *generate(EngineContext *context, Crankshaft *crank) = 0;
+        virtual bool hasLobesForCylinders(int count) const = 0;
 
     protected:
         virtual void registerInputs() {

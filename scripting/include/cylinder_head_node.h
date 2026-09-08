@@ -37,6 +37,9 @@ namespace es_script {
 
         void setBank(CylinderBankNode *bank) { m_bank = bank; }
         CylinderBankNode *getBank() const { return m_bank; }
+        bool hasLobesForCylinders(int count) const {
+            return m_valvetrain != nullptr && m_valvetrain->hasLobesForCylinders(count);
+        }
 
     protected:
         virtual void registerInputs() {

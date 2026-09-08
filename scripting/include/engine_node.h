@@ -35,6 +35,8 @@ namespace es_script {
             for (const CylinderBankNode *bank : m_cylinderBanks) {
                 if (bank->getCylinderCount() == 0) return "Cylinder bank requires at least one cylinder";
                 if (bank->getCylinderHead() == nullptr) return "Cylinder bank requires a cylinder head";
+                if (!bank->getCylinderHead()->hasLobesForCylinders(bank->getCylinderCount()))
+                    return "Every intake and exhaust camshaft, including VTEC profiles, requires a lobe for each cylinder in its bank";
                 for (int i = 0; i < bank->getCylinderCount(); ++i) {
                     const auto &cylinder = bank->getCylinder(i);
                     if (!rods.emplace(cylinder.rod, cylinder.rodJournal).second)

@@ -319,3 +319,12 @@ The regression checks pin spacing and the center-of-mass origin for positive,
 negative, and zero offsets; it failed before the fix and now passes alongside
 the other 13 simulator regressions. Rod destruction also frees its owned
 journal-angle array, which previously leaked when engines were destroyed.
+
+### Camshaft lobe counts
+
+Script assembly validation now requires every intake and exhaust camshaft to
+have at least as many lobes as its cylinder bank, including both sets of VTEC
+cams. This runs before engine allocation. A four-cylinder fixture with only
+three intake lobes was previously accepted even though valve evaluation indexed
+the missing fourth lobe; it now reports a script error with source locations.
+All 14 simulator regressions and short runs of 20 bundled engines passed.

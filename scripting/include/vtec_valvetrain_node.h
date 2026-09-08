@@ -46,6 +46,15 @@ namespace es_script {
             return valvetrain;
         }
 
+        bool hasLobesForCylinders(int count) const override {
+            return m_intakeCamshaft != nullptr && m_exhaustCamshaft != nullptr
+                && m_vtecIntakeCamshaft != nullptr && m_vtecExhaustCamshaft != nullptr
+                && m_intakeCamshaft->hasLobesForCylinders(count)
+                && m_exhaustCamshaft->hasLobesForCylinders(count)
+                && m_vtecIntakeCamshaft->hasLobesForCylinders(count)
+                && m_vtecExhaustCamshaft->hasLobesForCylinders(count);
+        }
+
     protected:
         virtual void registerInputs() {
             addInput("vtec_intake_camshaft", &m_vtecIntakeCamshaft, InputTarget::Type::Object);
