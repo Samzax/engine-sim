@@ -58,7 +58,13 @@ encoder cannot initialize, recording retries with software encoding.
 GUI capture through that fallback passed in the isolated desktop diagnostic;
 hardware recording with the current FFmpeg SDK still needs a compatible driver.
 
-For a video-enabled build, use an FFmpeg shared development distribution and
+For the tested FFmpeg version, run `./tools/setup-video.ps1`, then configure with
+`-DDTV=ON -C build/deps/video-deps.cmake` in addition to the normal Windows
+dependency preset. The script downloads a pinned shared SDK, verifies its SHA256,
+and extracts it under `build/deps`. CI uses this setup for its video-enabled
+Release build and uploads that ZIP separately from the default package.
+
+To supply your own SDK instead, use an FFmpeg shared development distribution and
 configure a separate build directory with `-DDTV=ON` and
 `-DCMAKE_PREFIX_PATH=C:/path/to/ffmpeg-shared`. Its `lib` directory must contain
 the import libraries and its `bin` directory the matching runtime DLLs.

@@ -20,6 +20,10 @@ jobs:
       fail-fast: false
       matrix:
         configuration: [Debug, Release]
+        video: ['OFF']
+        include:
+          - configuration: Release
+            video: 'ON'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,8 +41,21 @@ jobs:
       - name: Install build dependencies
         shell: pwsh
         run: ./tools/setup-windows.ps1
+      - uses: actions/cache@v4
+        if: matrix.video == 'ON'
+        with:
+          path: build/deps/ffmpeg-9.0.1-full_build-shared
+          key: windows-ffmpeg-${{ hashFiles('tools/setup-video.ps1') }}
+      - name: Install video dependencies
+        if: matrix.video == 'ON'
+        shell: pwsh
+        run: ./tools/setup-video.ps1
       - name: Configure
-        run: cmake -S . -B build/windows -A x64 -C build/deps/windows-deps.cmake
+        shell: pwsh
+        run: |
+          $videoArgs = @()
+          if ('${{ matrix.video }}' -eq 'ON') { $videoArgs = @('-C', 'build/deps/video-deps.cmake') }
+          cmake -S . -B build/windows -A x64 -C build/deps/windows-deps.cmake -DDTV=${{ matrix.video }} @videoArgs
       - name: Build application and tests
         run: cmake --build build/windows --config ${{ matrix.configuration }} --target engine-sim-app engine-sim-headless engine-sim-test engine-sim-audio-test --parallel 2
       - name: Test
@@ -49,8 +66,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.configuration == 'Release'
         with:
-          name: engine-sim-windows-x64
-          path: build/packages/engine-sim-windows-x64.zip
+          name: engine-sim-windows-x64${{ matrix.video == 'ON' && '-video' || '' }}
+          path: build/packages/engine-sim-windows-x64${{ matrix.video == 'ON' && '-video' || '' }}.zip
           if-no-files-found: error
   audio-sanitizers:
     runs-on: ubuntu-22.04
