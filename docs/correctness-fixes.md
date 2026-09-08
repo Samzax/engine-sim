@@ -339,3 +339,16 @@ deactivation below it, and stationary operation with `min_speed: 0`.
 The default script threshold remains 10 mph, so stationary engine-dyno users
 who want VTEC activation must explicitly set it to zero. RPM, manifold pressure,
 and throttle conditions still apply. All 15 simulator regressions passed.
+
+### Piston wrist-pin offsets
+
+Initial placement now aligns the actual wrist pin with the rod's little end,
+chamber volume measures piston height from that pin, and the rendered crown
+uses the same compression-height reference. Previously, a nonzero
+`wrist_pin_position` affected the constraints but not these calculations
+consistently. A Honda fixture with a 10 mm offset reproduced a 10 mm initial
+joint gap and a 51.5 cc discrepancy per chamber relative to its actual pin
+position. After the fix, the gap was below 2e-14 m and the volume discrepancy
+was zero. The temporary measurement was removed afterward. All 15 simulator
+regressions passed, and the offset fixture completed the isolated GUI reload,
+rendering, and shutdown check; its captured frame was inspected.

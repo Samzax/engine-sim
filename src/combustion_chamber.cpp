@@ -122,9 +122,11 @@ double CombustionChamber::getVolume() const {
     const CylinderBank *bank = m_head->getCylinderBank();
 
     const double area = bank->boreSurfaceArea();
+    double pin_x, pin_y;
+    m_piston->m_body.localToWorld(0, m_piston->getWristPinLocation(), &pin_x, &pin_y);
     const double s =
-        m_piston->relativeX() * bank->getDx()
-        + m_piston->relativeY() * bank->getDy();
+        (pin_x - bank->getX()) * bank->getDx()
+        + (pin_y - bank->getY()) * bank->getDy();
     const double sweep =
         area * (bank->getDeckHeight() - s - m_piston->getCompressionHeight());
 

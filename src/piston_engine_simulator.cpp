@@ -287,6 +287,10 @@ void PistonEngineSimulator::placeCylinder(int i) {
     piston->m_body.p_x = e_x;
     piston->m_body.p_y = e_y;
     piston->m_body.theta = bank->getAngle() + constants::pi;
+    double pin_x, pin_y;
+    piston->m_body.localToWorld(0, piston->getWristPinLocation(), &pin_x, &pin_y);
+    piston->m_body.p_x += e_x - pin_x;
+    piston->m_body.p_y += e_y - pin_y;
 }
 
 void PistonEngineSimulator::simulateStep_() {

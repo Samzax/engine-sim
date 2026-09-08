@@ -37,7 +37,7 @@ void PistonObject::render(const ViewParameters *view) {
         &m_piston->m_body,
         (float)(m_piston->getCylinderBank()->getBore() / 2),
         0.0f,
-        (float)(-m_piston->getCompressionHeight() - m_piston->getWristPinLocation()));
+        (float)(m_piston->getWristPinLocation() - m_piston->getCompressionHeight()));
 
     m_app->getShaders()->SetBaseColor(col);
     m_app->getEngine()->DrawModel(
