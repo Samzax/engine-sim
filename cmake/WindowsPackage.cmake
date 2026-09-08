@@ -21,12 +21,16 @@ add_custom_command(TARGET engine-sim-app POST_BUILD
 
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME Runtime)
 install(TARGETS engine-sim-app RUNTIME DESTINATION .)
+if (TARGET engine-sim-headless)
+    install(TARGETS engine-sim-headless RUNTIME DESTINATION .)
+endif()
 install(FILES "${ENGINE_SIM_SDL_RUNTIME}" "${ENGINE_SIM_IMAGE_RUNTIME}" DESTINATION .)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets" "${PROJECT_SOURCE_DIR}/es" DESTINATION .)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/fonts"
     "${PROJECT_SOURCE_DIR}/dependencies/submodules/delta-studio/engines/basic/shaders" DESTINATION engine)
 install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION .)
 install(FILES "${PROJECT_SOURCE_DIR}/docs/portable-release.md" DESTINATION . RENAME README.md)
+install(FILES "${PROJECT_SOURCE_DIR}/docs/headless.md" DESTINATION .)
 install(FILES "${SDL2_DIR}/COPYING.txt" DESTINATION licenses RENAME SDL2.txt)
 get_filename_component(_image_root "${_image_lib_dir}/../.." ABSOLUTE)
 install(FILES "${_image_root}/LICENSE.txt" DESTINATION licenses RENAME SDL2_image.txt)

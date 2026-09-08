@@ -315,6 +315,10 @@ target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
 add_subdirectory(dependencies)
+if (PIRANHA_ENABLED)
+    add_executable(engine-sim-headless tools/headless.cpp)
+    target_link_libraries(engine-sim-headless engine-sim engine-sim-script-interpreter)
+endif()
 include(cmake/WindowsPackage.cmake)
 
 # GTEST

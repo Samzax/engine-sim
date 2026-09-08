@@ -27,7 +27,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build/windows -A x64 -C build/deps/windows-deps.cmake
       - name: Build application and tests
-        run: cmake --build build/windows --config ${{ matrix.configuration }} --target engine-sim-app engine-sim-test engine-sim-audio-test --parallel 2
+        run: cmake --build build/windows --config ${{ matrix.configuration }} --target engine-sim-app engine-sim-headless engine-sim-test engine-sim-audio-test --parallel 2
       - name: Test
         run: ctest --test-dir build/windows -C ${{ matrix.configuration }} --output-on-failure -R "^(audio-regressions|GasSystemTests|FunctionTests|SynthesizerTests|SimulatorRegression)"
       - name: Package portable release

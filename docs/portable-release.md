@@ -13,6 +13,9 @@ x64 PC with DirectX 11 graphics and a working audio output is required.
 Developer builds generate `delta.conf` beside the executable, pointing at the
 checkout. Portable packages use their own adjacent assets without that file.
 
+For simulation and audio statistics without a window, use `engine-sim-headless.exe`.
+See `headless.md` for commands and controls.
+
 ## Building the ZIP
 
 After a Release build, run:
