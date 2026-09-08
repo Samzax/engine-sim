@@ -372,3 +372,13 @@ alone does not protect the GUI. An isolated-desktop check reloaded the zero-volu
 intake fixture into a running engine, reported its source location, preserved
 the current simulator, and completed shutdown. The temporary diagnostic path
 was removed afterward; all 15 simulator regressions passed.
+
+### Harmonic cam sample count
+
+Harmonic cam lobes now require at least six `steps`, so their `steps - 5`
+spacing denominator is positive. Previously `steps: 1` silently generated only
+the peak sample, which the curve sampler extended across the entire cycle;
+zero steps produced an empty curve. A Honda fixture reproduced successful
+loading with one step and now reports a script error at the offending lobe.
+The six-step boundary still loads, and all 15 simulator regressions passed,
+including the existing cam-duration check. The default remains 100 steps.

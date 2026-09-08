@@ -468,6 +468,13 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            // Five samples are reserved for the tail beyond the lobe. A
+            // smaller count gives nonpositive spacing or only the peak.
+            if (m_steps <= 5) {
+                throwError("Harmonic cam lobe requires at least 6 steps");
+                return;
+            }
+
             const double angle = m_durationAt50Thou / 4;
             // Invert lift * ((1 + cos(k * angle)) / 2)^gamma at 0.050 inch.
             const double s = 2 * std::pow(units::distance(50, units::thou) / m_lift, 1 / m_gamma) - 1;
