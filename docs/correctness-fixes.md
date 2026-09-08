@@ -452,3 +452,12 @@ previously bypassed deletion of four labeled gauges and their four child gauges
 on each dashboard rebuild and shutdown. The ownership path was checked through
 `UiElement::destroy` and `LabeledGauge::destroy`; the Release build and hidden GUI
 successful reload, failed reload preserving the engine, and shutdown passed.
+
+Stored peak torque, power, and their RPM now update only while the dyno is
+enabled. Previously the display filters could continue approaching residual
+measurements after switching the dyno off, changing the saved result: for
+example, filtered torque 50 and residual input 90 produce 55.714 after one 60 Hz
+update. The new condition freezes stored peaks during that period; live filters
+continue updating. The calculation was checked directly, and the Release build
+and hidden GUI reload/shutdown check passed. The GUI check does not itself
+exercise a loaded dyno sweep.

@@ -289,7 +289,7 @@ void LoadSimulationCluster::updateHpAndTorque(float dt) {
     m_filteredTorque = (1 - alpha) * m_filteredTorque + alpha * torqueWithUnits;
     m_filteredHorsepower = (1 - alpha) * m_filteredHorsepower + alpha * powerWithUnits;
 
-    if (m_simulator->getEngine() != nullptr) {
+    if (m_simulator->m_dyno.m_enabled && m_simulator->getEngine() != nullptr) {
         if (m_filteredTorque > m_peakTorque) {
             m_peakTorque = m_filteredTorque;
             m_peakTorqueRpm = m_simulator->getEngine()->getRpm();
