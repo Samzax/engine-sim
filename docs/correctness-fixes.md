@@ -233,3 +233,24 @@ physics solvers borrowed by the dependency, and releases the generic solver's
 intermediate matrices. Debug lifecycle checks and the isolated GUI reload check
 passed. The GUI check deliberately exercises a compile failure; it does not
 exercise every malformed assembly through the GUI.
+
+### Window focus and multiple input devices
+
+Windows focus loss now clears cached held keys and mouse buttons before
+background release messages are discarded. The UI cancels dragging without
+generating a click, including when focus leaves and returns between updates.
+The simulation continues running while the window is inactive.
+
+Keyboard and mouse aggregators now consume matching transitions from every
+registered device before returning. Previously, boolean short-circuiting left
+events on later devices pending for the next poll. A standalone check using
+the dependency's actual classes and two in-memory devices reproduced a second
+press without new input for both keyboards and mice; both now report only the
+first press. Windows mouse input also refreshes every registered mouse's cached
+desktop cursor position, so the UI's first-device lookup does not become stale
+when another mouse moves.
+
+`cmake/DeltaInputFix.cmake` applies these dependency changes to generated build
+copies, leaving the pinned submodule unchanged. Release builds and the isolated
+GUI lifecycle check passed. These checks do not establish physical Alt-Tab,
+dragging, or multi-mouse behavior on real input devices.
