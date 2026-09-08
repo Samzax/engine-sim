@@ -1421,6 +1421,16 @@ void EngineSimApplication::stopRecording() {
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
     m_encoder.commit();
     m_encoder.stop();
+    const auto error = m_encoder.getError();
+    if (error != atg_dtv::Encoder::Error::None) {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Video recording failed while stopping (encoder error "
+            << static_cast<int>(error) << ").\n";
+        m_infoCluster->setLogMessage("Video recording failed; see error_log.log");
+    }
+    else {
+        m_infoCluster->setLogMessage("Video recording saved in video_capture");
+    }
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
 }
 
