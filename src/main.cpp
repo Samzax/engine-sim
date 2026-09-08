@@ -29,11 +29,13 @@ int WINAPI WinMain(
     }
     application.initialize((void *)&hInstance, ysContextObject::DeviceAPI::DirectX11);
     application.run(diagnostic ? 120 : 0);
+    const double diagnosticRpm = diagnostic ? application.getSimulator()->getEngine()->getRpm() : 0.0;
     application.destroy();
     if (diagnostic) {
         std::ofstream report("gui-check.txt");
         report << "GUI initialization, successful reload, failed reload preserving the engine, "
             "120 frame-loop iterations and shutdown completed.\n";
+        report << "Final engine speed with starter engaged: " << diagnosticRpm << " rpm\n";
         if (!report) return 3;
     }
 

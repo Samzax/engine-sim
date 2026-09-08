@@ -562,6 +562,10 @@ void EngineSimApplication::run(int maxFrames) {
         updateScreenSizeStability();
 
         processEngineInput();
+        if (m_diagnosticMode && m_iceEngine != nullptr) {
+            m_iceEngine->getIgnitionModule()->m_enabled = true;
+            m_iceEngine->setThrottle(0.1);
+        }
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Insert) &&
             m_engine.GetGameWindow()->IsActive()) {
@@ -1075,7 +1079,7 @@ void EngineSimApplication::processEngineInput() {
     m_simulator->m_dyno.m_rotationSpeed = m_dynoSpeed;
 
     const bool prevStarterEnabled = m_simulator->m_starterMotor.m_enabled;
-    if (m_engine.IsKeyDown(ysKey::Code::S)) {
+    if (m_engine.IsKeyDown(ysKey::Code::S) || m_diagnosticMode) {
         m_simulator->m_starterMotor.m_enabled = true;
     }
     else {

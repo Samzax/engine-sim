@@ -23,6 +23,9 @@ Discord initialization, runs 120 frame-loop iterations, and performs normal
 shutdown. A successful run writes `gui-check.txt` and exports its final render
 target as `gui-check.bmp` in the working directory. The image comes from the
 application's GPU texture, not from a desktop screenshot.
+The diagnostic enables ignition, holds the starter and applies 10% throttle
+through the simulation API. The report includes final RPM; this exercises the
+live gauges and traces but does not claim a stable idle with the starter released.
 At frame 40 it reloads the configured engine through the normal reload and audio
 stop/restart path. At frame 80 it deliberately attempts to compile the assets
 directory as a script and verifies that the current simulator survives. This
