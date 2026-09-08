@@ -45,6 +45,7 @@ CombustionChamber::~CombustionChamber() {
 }
 
 void CombustionChamber::initialize(const Parameters &params) {
+    m_thermal.initialize(params.thermal);
     m_piston = params.Piston;
     m_head = params.Head;
     m_fuel = params.Fuel;
@@ -245,9 +246,7 @@ void CombustionChamber::flow(double dt) {
         cylinderHeight * constants::pi * m_head->getCylinderBank()->getBore()
         + m_cylinderCrossSectionSurfaceArea * 2;
 
-    const double dT = units::celcius(90.0) - m_system.temperature();
-
-    m_system.changeEnergy(dT * cylinderSurfaceArea * 100 * dt);
+    m_thermal.exchange(m_system, cylinderSurfaceArea, calculateMeanPistonSpeed(), dt);
     m_system.flow(m_piston->getBlowbyK(), dt, m_crankcasePressure, units::celcius(25.0));
 
     Intake *intake = m_head->getIntake(m_piston->getCylinderIndex());

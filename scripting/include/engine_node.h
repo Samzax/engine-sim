@@ -177,6 +177,7 @@ namespace es_script {
             ccParams.StartingPressure = units::pressure(1.0, units::atm);
             ccParams.StartingTemperature = units::celcius(25.0);
             ccParams.MeanPistonSpeedToTurbulence = meanPistonSpeedToTurbulence;
+            ccParams.thermal = m_parameters.thermal;
 
             for (int i = 0; i < engine->getCylinderCount(); ++i) {
                 ccParams.Piston = engine->getPiston(i);
@@ -211,6 +212,12 @@ namespace es_script {
             addInput("dyno_min_speed", &m_parameters.dynoMinSpeed);
             addInput("dyno_max_speed", &m_parameters.dynoMaxSpeed);
             addInput("dyno_hold_step", &m_parameters.dynoHoldStep);
+            addInput("thermal_model", &m_parameters.thermal.enabled);
+            addInput("wall_temperature", &m_parameters.thermal.initialWallTemperature);
+            addInput("coolant_temperature", &m_parameters.thermal.coolantTemperature);
+            addInput("wall_heat_capacity", &m_parameters.thermal.wallHeatCapacity);
+            addInput("coolant_conductance", &m_parameters.thermal.coolantConductance);
+            addInput("heat_transfer_scale", &m_parameters.thermal.heatTransferScale);
             addInput("redline", &m_parameters.redline);
             addInput("fuel", &m_fuel, InputTarget::Type::Object);
             addInput("throttle", &m_throttle, InputTarget::Type::Object);

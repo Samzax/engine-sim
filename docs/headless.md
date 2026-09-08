@@ -4,6 +4,8 @@
 without creating a window or opening an audio device. It prints actual simulated
 time, processing wall time, final RPM, sample count, normalized audio RMS, and
 the number of samples saturated at the PCM16 limits.
+It also reports mean cylinder-wall temperature in K and cumulative heat delivered
+to the coolant reservoir in J. See [physics model settings](physics-realism.md).
 
 ```powershell
 ./engine-sim-headless.exe assets/main.mr es 10

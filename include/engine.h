@@ -39,6 +39,7 @@ class Engine : public Part {
             double dynoMinSpeed = units::rpm(1000);
             double dynoMaxSpeed = units::rpm(6500);
             double dynoHoldStep = units::rpm(100);
+            CylinderThermalModel::Parameters thermal;
 
             Throttle *throttle;
 

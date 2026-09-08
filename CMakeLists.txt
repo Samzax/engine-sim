@@ -113,6 +113,7 @@ add_library(engine-sim STATIC
     include/convolution_filter.h
     include/cylinder_bank.h
     include/cylinder_head.h
+    include/cylinder_thermal_model.h
     include/delay_filter.h
     include/derivative_filter.h
     include/direct_throttle_linkage.h

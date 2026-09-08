@@ -1,10 +1,48 @@
 #include <gtest/gtest.h>
 
 #include "../include/gas_system.h"
+#include "../include/cylinder_thermal_model.h"
 #include "../include/units.h"
 #include "../include/csv_io.h"
 
 #include <sstream>
+
+TEST(GasSystemTests, CylinderThermalEnergyBalance) {
+    GasSystem gas;
+    gas.initialize(5e5, 0.0005, 1000);
+    CylinderThermalModel thermal;
+    CylinderThermalModel::Parameters p;
+    p.initialWallTemperature = 300;
+    p.coolantTemperature = 290;
+    p.wallHeatCapacity = 500;
+    thermal.initialize(p);
+    const double initial = gas.kineticEnergy() + p.wallHeatCapacity * thermal.wallTemperature();
+    for (int i = 0; i < 1000; ++i) thermal.exchange(gas, 0.04, 10, 0.001);
+    const double final = gas.kineticEnergy() + p.wallHeatCapacity * thermal.wallTemperature()
+        + thermal.coolantEnergy();
+    EXPECT_NEAR(final, initial, initial * 1e-11);
+    EXPECT_LT(gas.temperature(), 1000);
+    EXPECT_GT(gas.temperature(), p.coolantTemperature);
+    EXPECT_GT(thermal.coolantEnergy(), 0);
+}
+
+TEST(GasSystemTests, CylinderThermalEquilibriumAndLargeStep) {
+    GasSystem gas;
+    gas.initialize(1e5, 0.0005, 300);
+    CylinderThermalModel thermal;
+    CylinderThermalModel::Parameters p;
+    p.initialWallTemperature = p.coolantTemperature = 300;
+    thermal.initialize(p);
+    thermal.exchange(gas, 0.04, 10, 1);
+    EXPECT_NEAR(gas.temperature(), 300, 1e-10);
+    EXPECT_NEAR(thermal.wallTemperature(), 300, 1e-10);
+    gas.changeTemperature(2000);
+    thermal.exchange(gas, 0.04, 10, 1000);
+    EXPECT_GE(gas.temperature(), 300);
+    EXPECT_LE(gas.temperature(), 2300);
+    EXPECT_GE(thermal.wallTemperature(), 300);
+    EXPECT_LE(thermal.wallTemperature(), 2300);
+}
 
 TEST(GasSystemTests, GasSystemSanity) {
     GasSystem system;

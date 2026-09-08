@@ -8,6 +8,7 @@
 #include "cylinder_head.h"
 #include "units.h"
 #include "fuel.h"
+#include "cylinder_thermal_model.h"
 
 class Engine;
 class CombustionChamber : public atg_scs::ForceGenerator {
@@ -21,6 +22,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double StartingPressure;
             double StartingTemperature;
             double CrankcasePressure;
+            CylinderThermalModel::Parameters thermal;
         };
 
         struct FlameEvent {
@@ -69,6 +71,8 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         void flow(double dt);
 
         double lastEventAfr() const;
+        double getWallTemperature() const { return m_thermal.wallTemperature(); }
+        double getCoolantEnergy() const { return m_thermal.coolantEnergy(); }
 
         double getLastIterationExhaustFlow() const { return m_exhaustFlow; }
 
@@ -118,6 +122,7 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         CylinderHead *m_head;
         Engine *m_engine;
         Fuel *m_fuel;
+        CylinderThermalModel m_thermal;
 };
 
 #endif /* ATG_ENGINE_SIM_COMBUSTION_CHAMBER_H */

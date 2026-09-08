@@ -184,10 +184,17 @@ int main(int argc, char **argv) {
         }
         const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         wave.finish();
+        double wallTemperature = 0, coolantEnergy = 0;
+        for (int i = 0; i < out.engine->getCylinderCount(); ++i) {
+            wallTemperature += out.engine->getChamber(i)->getWallTemperature();
+            coolantEnergy += out.engine->getChamber(i)->getCoolantEnergy();
+        }
+        wallTemperature /= out.engine->getCylinderCount();
         std::cout << out.engine->getName() << ": simulated=" << simulated << "s, wall=" << wall
             << "s, rpm=" << out.engine->getRpm() << ", peak_rpm=" << peakRpm << ", samples=" << samples
             << ", rms=" << (samples ? std::sqrt(energy / samples) : 0)
-            << ", clipped=" << clipped << '\n';
+            << ", clipped=" << clipped << ", wall_temperature_K=" << wallTemperature
+            << ", coolant_energy_J=" << coolantEnergy << '\n';
         return samples ? 0 : 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

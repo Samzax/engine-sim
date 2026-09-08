@@ -82,6 +82,12 @@ private node _engine => __engine_sim__engine {
     input dyno_min_speed [float];
     input dyno_max_speed [float];
     input dyno_hold_step [float];
+    input thermal_model [bool];
+    input wall_temperature [float];
+    input coolant_temperature [float];
+    input wall_heat_capacity [float];
+    input coolant_conductance [float];
+    input heat_transfer_scale [float];
 
     input fuel [fuel];
     input throttle [throttle_channel];
@@ -104,6 +110,12 @@ public node engine {
     input dyno_min_speed: 1000 * units.rpm;
     input dyno_max_speed: redline;
     input dyno_hold_step: 100 * units.rpm;
+    input thermal_model: true;
+    input wall_temperature: 363.15; // K
+    input coolant_temperature: 363.15; // K, prescribed reservoir
+    input wall_heat_capacity: 4000.0; // J/K per cylinder
+    input coolant_conductance: 40.0; // W/K per cylinder
+    input heat_transfer_scale: 1.0;
 
     input fuel: params.fuel;
     input throttle_gamma: 1.0;
@@ -125,6 +137,12 @@ public node engine {
             dyno_min_speed: dyno_min_speed,
             dyno_max_speed: dyno_max_speed,
             dyno_hold_step: dyno_hold_step,
+            thermal_model: thermal_model,
+            wall_temperature: wall_temperature,
+            coolant_temperature: coolant_temperature,
+            wall_heat_capacity: wall_heat_capacity,
+            coolant_conductance: coolant_conductance,
+            heat_transfer_scale: heat_transfer_scale,
 
             fuel: fuel,
             throttle: throttle,
