@@ -227,6 +227,12 @@ the selected engine. Runtime script errors include source locations in
 `error_log.log`. Manual malformed-script cases exercised these errors; all 20
 bundled engines passed short load-and-simulate checks after the wiring changes.
 
+Journal attachment actions reject a second attachment before overwriting the
+journal's owner. Engine selection also rejects duplicate crankshaft instances.
+Both mistakes now report script errors instead of silently changing the assembly.
+Shared intake and exhaust systems initialize once per engine; cylinders reference
+those initialized systems rather than repeating their setup for every cylinder.
+
 Repeated engine, vehicle and transmission selections within one script now
 release the superseded objects. Simulator teardown also owns and releases the
 physics solvers borrowed by the dependency, and releases the generic solver's
@@ -254,3 +260,7 @@ when another mouse moves.
 copies, leaving the pinned submodule unchanged. Release builds and the isolated
 GUI lifecycle check passed. These checks do not establish physical Alt-Tab,
 dragging, or multi-mouse behavior on real input devices.
+
+F1/F2 camera rotation no longer imposes a minimum 5 ms per frame, which made
+rotation faster above 200 FPS. It still caps long frames to avoid a jump after a
+stall. This camera change does not alter the physics timestep.
