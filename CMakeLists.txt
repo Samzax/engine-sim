@@ -316,6 +316,10 @@ target_include_directories(engine-sim-app
 
 add_subdirectory(dependencies)
 include(cmake/DeltaAudioFix.cmake)
+if (WIN32)
+    add_executable(engine-sim-audio-device-check EXCLUDE_FROM_ALL tools/audio-device-check.cpp)
+    target_link_libraries(engine-sim-audio-device-check delta-core dsound)
+endif()
 if (PIRANHA_ENABLED)
     add_executable(engine-sim-headless tools/headless.cpp)
     target_link_libraries(engine-sim-headless engine-sim engine-sim-script-interpreter)

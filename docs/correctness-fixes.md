@@ -93,3 +93,6 @@ whole-buffer unlock. It compiles a patched build-directory copy, leaves the
 submodule clean, and fails configuration if the expected upstream source changes
 so the patch must be reviewed. Debug and Release compile the generated source;
 actual device playback remains unverified under the background-only constraint.
+The subsequent hidden-window diagnostic exercised the actual DirectSound buffer
+upload/readback path in Debug and Release without playback or changing focus;
+both passed. See `audio-device-check.md` for the exact scope and commands.
