@@ -403,3 +403,13 @@ Previously, specifying only a color or pressure setting supplied the uppercase
 default `MPH`, which the case-sensitive speed selector interpreted as KPH.
 An isolated GUI run with only `pressure_units: "bar"` reproduced KPH before
 the change and displayed MPH afterward. Explicitly supplied units are unchanged.
+
+### Positive manifold gauge pressure
+
+PSI and inHg readouts now retain manifold pressure above ambient instead of
+clamping it to zero. The existing half-unit near-zero deadband applies to the
+magnitude of the reading, so it no longer suppresses all positive values.
+An isolated GUI run with a temporary 1.1-atmosphere display input showed the
+expected 1.5 PSI reading; previously the conversion and display both forced
+that input to zero. The temporary input was removed and the normal application
+rebuilt. This is a readout correction, not a change to the intake simulation.
