@@ -1297,9 +1297,8 @@ void EngineSimApplication::refreshUserInterface() {
 }
 
 void EngineSimApplication::startRecording() {
-    m_recording = true;
-
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE
+    if (m_recording || !readyToRecord()) return;
     atg_dtv::Encoder::VideoSettings settings{};
 
     // Output filename
@@ -1313,6 +1312,9 @@ void EngineSimApplication::startRecording() {
     settings.bitRate = 40000000;
 
     m_encoder.run(settings, 2);
+    m_recording = true;
+#else
+    m_infoCluster->setLogMessage("Video recording is unavailable in this build");
 #endif /* ATG_ENGINE_SIM_VIDEO_CAPTURE */
 }
 
@@ -1327,7 +1329,7 @@ bool EngineSimApplication::readyToRecord() {
     const int w = m_screenResolution[0][0];
     const int h = m_screenResolution[0][1];
 
-    if (w <= 0 && h <= 0) return false;
+    if (w <= 0 || h <= 0) return false;
     if ((w % 2) != 0 || (h % 2) != 0) return false;
 
     for (int i = 1; i < ScreenResolutionHistoryLength; ++i) {
@@ -1339,6 +1341,7 @@ bool EngineSimApplication::readyToRecord() {
 }
 
 void EngineSimApplication::stopRecording() {
+    if (!m_recording) return;
     m_recording = false;
 
 #ifdef ATG_ENGINE_SIM_VIDEO_CAPTURE

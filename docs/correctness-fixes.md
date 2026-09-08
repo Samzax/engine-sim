@@ -120,3 +120,10 @@ generated source copy when video capture is enabled. A standalone check using
 the dependency's actual queue reproduced the failure on the second recording;
 the patched queue waited for and delivered frames on both recordings. This
 checks queue restart behavior independently of FFmpeg or the desktop.
+
+In builds without video capture, the recording shortcut now reports that the
+feature is unavailable instead of silently setting the recording flag. Enabled
+builds reject recording dimensions when either dimension is nonpositive, and
+start/stop calls guard against repeated transitions. The normal Release build
+and video-enabled syntax compilation both passed; the shortcut was not exercised
+through keyboard input.
