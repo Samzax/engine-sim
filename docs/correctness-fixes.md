@@ -429,3 +429,13 @@ calculation over half a second reached 53.67 percent at 30 FPS, 78.54 percent at
 60 FPS, and 99.79 percent at 240 FPS before the change; the new filter reached
 78.54 percent at all three rates. The Release application built successfully.
 Graph sampling frequency and the underlying simulated torque are unchanged.
+
+### Dyno graph sampling cadence
+
+The quarter-second sampling timer now carries overdue time into its next
+interval instead of discarding it. A ten-second timer calculation produced
+38 samples at 30 and 60 FPS before the change and 40 afterward; 144 FPS also
+produced 40. Sampling still occurs on display frames, so individual timestamps
+remain frame-quantized. Long frames record only the current reading, without
+inventing samples for skipped intervals. Disabling the dyno resets the timer
+so the next run samples immediately. The Release application built successfully.

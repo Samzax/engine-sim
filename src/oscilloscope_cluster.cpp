@@ -246,7 +246,9 @@ void OscilloscopeCluster::update(float dt) {
     Engine *engine = m_simulator->getEngine();
     if (engine != nullptr) {
         if (m_updateTimer <= 0 && m_simulator->m_dyno.m_enabled) {
-            m_updateTimer = m_updatePeriod;
+            // Preserve the overdue fraction, but do not duplicate the current
+            // reading for sampling intervals skipped during a long frame.
+            m_updateTimer = m_updatePeriod + std::fmod(m_updateTimer, m_updatePeriod);
 
             m_torqueScope->addDataPoint(engine->getRpm(), m_torque);
             m_powerScope->addDataPoint(engine->getRpm(), m_power);
@@ -257,7 +259,10 @@ void OscilloscopeCluster::update(float dt) {
             engine->getIgnitionModule()->getTimingAdvance());
     }
 
-    m_updateTimer -= dt;
+    if (engine != nullptr && m_simulator->m_dyno.m_enabled)
+        m_updateTimer -= std::fmax(dt, 0.0f);
+    else
+        m_updateTimer = 0.0f;
 
     UiElement::update(dt);
 }
