@@ -237,6 +237,7 @@ TEST(SimulatorRegression, InvalidCurveStopsScriptBeforeEngineCreation) {
     std::ifstream log("error_log.log");
     const std::string message((std::istreambuf_iterator<char>(log)), {});
     EXPECT_NE(message.find("Function samples must have finite coordinates and values"), std::string::npos);
+    EXPECT_NE(message.find("invalid_function_sample.mr(5)"), std::string::npos);
 }
 
 TEST(SimulatorRegression, IncompleteEngineReportsScriptError) {
@@ -253,6 +254,7 @@ TEST(SimulatorRegression, IncompleteEngineReportsScriptError) {
     std::ifstream log("error_log.log");
     const std::string message((std::istreambuf_iterator<char>(log)), {});
     EXPECT_NE(message.find("Engine requires at least one crankshaft"), std::string::npos);
+    EXPECT_NE(message.find("incomplete_engine.mr(4)"), std::string::npos);
 }
 
 TEST(SimulatorRegression, HayabusaCamDurationMatchesFiftyThouLift) {

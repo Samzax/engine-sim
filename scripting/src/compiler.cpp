@@ -67,7 +67,22 @@ es_script::Compiler::Output es_script::Compiler::execute() {
 
     if (!result || output()->engine == nullptr) {
         std::ofstream file("error_log.log", std::ios::app);
-        if (!result) file << "Script runtime error: " << m_program.getRuntimeError() << '\n';
+        if (!result) {
+            file << "Script runtime error: " << m_program.getRuntimeError() << '\n';
+            const piranha::Node *node = m_program.getErrorNode();
+            const auto printLocation = [&file](const piranha::IrParserStructure *source) {
+                if (source != nullptr && source->getParentUnit() != nullptr) {
+                    file << "       At " << source->getParentUnit()->getPath().toString()
+                        << '(' << source->getSummaryToken()->lineStart << ")\n";
+                }
+            };
+            if (node != nullptr) {
+                printLocation(node->getIrStructure());
+                for (auto *context = node->getContext(); context != nullptr; context = context->getParent()) {
+                    printLocation(context->getContext());
+                }
+            }
+        }
         file << "Script execution failed or did not produce an engine. The current engine was not replaced.\n";
     }
     output()->success = result && output()->engine != nullptr;

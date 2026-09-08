@@ -41,9 +41,14 @@ namespace es_script {
         void printError(const piranha::CompilationError *err, std::ofstream &file) const;
 
     private:
+        class Program : public piranha::NodeProgram {
+        public:
+            piranha::Node *getErrorNode() const { return m_errorNode; }
+        };
+
         LanguageRules m_rules;
         piranha::Compiler *m_compiler;
-        piranha::NodeProgram m_program;
+        Program m_program;
     };
 
 } /* namespace es_script */
