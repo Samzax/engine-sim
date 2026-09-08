@@ -271,3 +271,20 @@ until the next frame. Opposing requests now cancel. A standalone check with
 the actual keyboard class reproduced requests of `+1, -1` on successive polls
 before the change and `0, 0` afterward, without sending OS input. The Release
 application build passed; this check does not exercise physical key presses.
+
+### Status-light storage and animation
+
+The dyno panel now clears its four-float status array using the array's own
+size. The previous double-based byte count wrote 32 bytes into 16 bytes of
+storage, overwriting adjacent members during construction. The firing-order
+display also releases its cylinder-light allocation on destruction, including
+when a reload replaces the UI.
+
+Firing-order light rise and fade now use elapsed time while preserving the
+previous 60 FPS response. For an initially full light with no subsequent firing,
+the old fade retained about 46%, 6%, and effectively 0% brightness after 100 ms
+at 30, 60, and 240 FPS. The new calculation retains about 6% at all three rates.
+Actual firing events remain sampled by the display, so this comparison verifies
+the smoothing calculation rather than identical rendered brightness for every
+engine event sequence. The Release build and isolated GUI initialization,
+reload, minimize/restore, frame-loop, and shutdown check passed.
