@@ -94,13 +94,16 @@ public:
         }
         thread_local std::vector<gpu_pipe::Pipe> batch;
         thread_local std::vector<GasPipe *> targets;
-        batch.clear(); targets.clear();
+        // Reuse records: clearing/emplacing zeroed all 64 slots for every pipe
+        // even when only eight cells were active.
+        batch.resize(count); targets.clear();
+        int gpuCount=0;
         for(int j=0;j<count;++j) {
             auto &pipe=*pipes[j];
             if(!pipe.active()) continue;
             if(!pipe.first().m_variableProperties) {pipe.advance(dt); continue;}
             targets.push_back(&pipe);
-            batch.emplace_back(); auto &out=batch.back();
+            auto &out=batch[gpuCount++];
             out.count=pipe.count(); out.dx=pipe.m_dx;
             out.diameter=2*std::sqrt(pipe.m_area/constants::pi);
             out.friction=pipe.m_frictionFactor;
@@ -110,9 +113,9 @@ public:
                 std::copy(u.begin(),u.end(),out.u[i]);
             }
         }
-        if(batch.empty()) return;
-        gpu_pipe::advance(batch.data(),static_cast<int>(batch.size()),dt);
-        for(size_t j=0;j<batch.size();++j) for(int i=0;i<batch[j].count;++i) {
+        if(gpuCount==0) return;
+        gpu_pipe::advance(batch.data(),gpuCount,dt);
+        for(int j=0;j<gpuCount;++j) for(int i=0;i<batch[j].count;++i) {
             Vector u; std::copy(batch[j].u[i],batch[j].u[i]+8,u.begin());
             restore(targets[j]->m_cells[i],u);
         }

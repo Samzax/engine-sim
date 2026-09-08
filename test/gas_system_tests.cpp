@@ -105,7 +105,15 @@ TEST(GasSystemTests, CudaPipeMatchesCpuAndConservesEnergy) {
         auto cpuIntake=intake,cpuExhaust=exhaust;
         for(int step=0;step<20;++step) {
             cpuIntake.advance(1e-5); cpuExhaust.advance(1e-5);
-            GasPipe::advancePair(intake,exhaust,1e-5);
+            if (step%2==0) GasPipe::advancePair(intake,exhaust,1e-5);
+            else {
+                // Exercise mapped-buffer/graph recreation when an engine
+                // reload changes the batch size, without changing the physics.
+                GasPipe *one[]={&intake};
+                GasPipe::advanceBatch(one,1,1e-5);
+                one[0]=&exhaust;
+                GasPipe::advanceBatch(one,1,1e-5);
+            }
         }
         double mass=0,energy=0;
         for(int i=0;i<count;++i) {

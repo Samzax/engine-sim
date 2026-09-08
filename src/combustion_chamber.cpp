@@ -301,7 +301,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes) {
     flowParams.system_1 = intakeIn;
     GasSystem::flow(flowParams);
 
-    m_intakeRunnerAndManifold.dissipateExcessVelocity();
+    if (!m_intakePipe.active()) m_intakeRunnerAndManifold.dissipateExcessVelocity();
 
     flowParams.k_flow = m_intakeFlowRate;
     flowParams.crossSectionArea_0 = m_head->getIntakeRunnerCrossSectionArea();
@@ -312,7 +312,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes) {
     flowParams.system_1 = &m_system;
     const double intakeFlow = GasSystem::flow(flowParams);
 
-    m_intakeRunnerAndManifold.dissipateExcessVelocity();
+    if (!m_intakePipe.active()) m_intakeRunnerAndManifold.dissipateExcessVelocity();
     m_system.dissipateExcessVelocity();
 
     flowParams.k_flow = m_exhaustFlowRate;
@@ -325,7 +325,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes) {
     const double exhaustFlow = GasSystem::flow(flowParams);
 
     m_system.dissipateExcessVelocity();
-    m_exhaustRunnerAndPrimary.dissipateExcessVelocity();
+    if (!m_exhaustPipe.active()) m_exhaustRunnerAndPrimary.dissipateExcessVelocity();
 
     flowParams.k_flow = m_primaryToCollectorFlowRate;
     flowParams.crossSectionArea_0 = m_head->getExhaustRunnerCrossSectionArea();

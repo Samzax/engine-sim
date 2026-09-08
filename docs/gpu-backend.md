@@ -30,11 +30,17 @@ per-cylinder substep schedule when different pipes impose different CFL limits.
 Chambers, port exchanges, rigid-body mechanics, combustion, oil, wall heat,
 controls and audio remain on the CPU. This is not a fully GPU-resident engine.
 
-Pinned staging buffers, device allocations and a CUDA graph are reused. Each pipe
-uses one block and each cell one lane; internal pipe substeps remain on-device.
-The graph batches upload, status reset, solve and download. A reload changing the
-pipe count recreates the buffers and graph. Failures are reported before results
-are applied to the host engine state.
+Mapped pinned buffers and a single-node CUDA graph are reused. Each pipe uses one
+block and each cell one lane. Cells are read once into GPU shared memory, evolved
+there, and written back once. Separate upload, status-reset and download commands
+are no longer submitted. Each block records its own status; the CPU accesses
+results only after stream completion. This follows NVIDIA's
+[mapped-memory synchronization requirements](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html).
+A reload changing the pipe count recreates the buffers and graph. Failures are
+reported before results are applied to the host engine state. CPU staging copies
+only active cells and reuses records rather than zeroing 64 slots on every call.
+Runner summaries for audio/readouts are calculated once per mechanical step;
+all physical cells still advance on every fluid step.
 
 ## Performance limits
 
@@ -44,12 +50,28 @@ Systems trace found most CUDA API time in stream synchronization and graph
 submission. That trace did not capture individual graph kernel timings, so it
 does not quantify the kernel's share of the total cost.
 
-With the competing GPU workload gone, an initial 0.1-second Hayabusa run took
+With the competing GPU workload gone, the initial backend's 0.1-second Hayabusa run took
 2.42 seconds on the RTX 3090 versus 0.40 seconds on the Ryzen 7 5700X CPU path.
 These are short startup observations, not universal GPU rankings. Earlier runs
 made while another application saturated the GPU are excluded from performance
 claims. More device-resident coupling is necessary before promising a useful
 interactive acceleration. Faster hardware alone does not remove these round trips.
+
+The subsequent mapped-memory optimization was compared with packaged revision
+`bf536870`, alternating three runs of each build on the same RTX 3090. Each run
+requested 0.25 simulated seconds with the starter held throughout and a 0.2 speed
+input, including WAV output. Median wall times were:
+
+| Engine | Previous GPU backend | Optimized GPU backend | Speedup |
+| --- | ---: | ---: | ---: |
+| Hayabusa | 5.669 s | 2.284 s | 2.48x |
+| Ferrari V12 | 4.183 s | 2.144 s | 1.95x |
+
+Reported engine metrics matched in all six before/after comparisons. A separate
+check of deferred runner summaries produced byte-identical WAV output. Startup
+audio varied between some repeated runs of both builds, so byte identity is not
+claimed for every benchmark run. These short headless results demonstrate a GPU
+backend improvement, **not real-time performance** or a GPU advantage over CPU.
 
 ## Build and checks
 

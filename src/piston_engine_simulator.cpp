@@ -354,12 +354,15 @@ void PistonEngineSimulator::simulateStep_() {
                 for(auto *pipe:m_pipes) h=(std::min)(h,pipe->stableTimestep());
                 for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
                 GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
-                for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->aggregatePipes();
                 remaining-=h;
             }
         }
     }
 
+    // Runner aggregates feed audio/readouts once per mechanical step. Port
+    // exchanges use the actual cells, so intermediate snapshots are redundant.
+    if(!m_pipes.empty())
+        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->aggregatePipes();
     im->resetIgnitionEvents();
 }
 

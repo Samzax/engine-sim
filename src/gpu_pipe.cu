@@ -67,26 +67,31 @@ __device__ int properties(const double *u,double fuelMass,double &p,double &v,do
 }
 
 // One block per pipe, one lane per cell. All substeps stay on the device.
-// The host submits all pipe interiors together; buffers and the graph are reused.
+// The host submits all pipe interiors together. Each cell is read from mapped
+// host memory once, evolves in shared memory, then is written back once.
+// Host access resumes only after stream completion, including status reads.
 __global__ void solve(Pipe *pipes,int *error) {
     Pipe &pipe=pipes[blockIdx.x];
     double dt=pipe.timestep;
     const int i=threadIdx.x,n=pipe.count;
+    const double fuelMass=pipe.fuelMass,dx=pipe.dx,friction=pipe.friction,diameter=pipe.diameter;
+    __shared__ int failureCode;
+    if(i==0) failureCode=0;
     __shared__ double u[64][8],f[65][8],p[64],v[64],speed[64],h;
     if (i<n) for (int k=0;k<8;++k) u[i][k]=pipe.u[i][k];
     __syncthreads();
     int steps=0;
     while (dt>0) {
-        if (++steps>10000) { if(i==0) atomicCAS(error,0,1); return; }
+        if (++steps>10000) { if(i==0) error[blockIdx.x]=1; return; }
         if (i<n) {
-            const int failure=properties(u[i],pipe.fuelMass,p[i],v[i],speed[i]);
-            if(failure) { atomicCAS(error,0,failure); speed[i]=1; p[i]=0; v[i]=0; }
+            const int failure=properties(u[i],fuelMass,p[i],v[i],speed[i]);
+            if(failure) { atomicCAS(&failureCode,0,failure); speed[i]=1; p[i]=0; v[i]=0; }
         }
         __syncthreads();
         if(i==0) {
             double maximum=1;
             for(int j=0;j<n;++j) maximum=fmax(maximum,speed[j]);
-            h=fmin(dt,.25*pipe.dx/maximum);
+            h=fmin(dt,.25*dx/maximum);
             for(int k=0;k<8;++k) f[0][k]=f[n][k]=0;
             f[0][5]=p[0]; f[n][5]=p[n-1];
         }
@@ -101,22 +106,23 @@ __global__ void solve(Pipe *pipes,int *error) {
         }
         __syncthreads();
         if(i<n) {
-            for(int k=0;k<8;++k) u[i][k]-=h/pipe.dx*(f[i+1][k]-f[i][k]);
+            for(int k=0;k<8;++k) u[i][k]-=h/dx*(f[i+1][k]-f[i][k]);
             for(int k=0;k<5;++k) {
-                if(!isfinite(u[i][k]) || u[i][k]<-1e-10) atomicCAS(error,0,6);
+                if(!isfinite(u[i][k]) || u[i][k]<-1e-10) atomicCAS(&failureCode,0,6);
                 u[i][k]=fmax(0.0,u[i][k]);
             }
-            const double rho=density(u[i],pipe.fuelMass);
+            const double rho=density(u[i],fuelMass);
             const double internal=u[i][6]-.5*u[i][5]*u[i][5]/rho;
-            if(!(rho>0) || !(internal>0) || !isfinite(internal)) atomicCAS(error,0,6);
+            if(!(rho>0) || !(internal>0) || !isfinite(internal)) atomicCAS(&failureCode,0,6);
             u[i][7]=fmin(rho,fmax(0.0,u[i][7]));
-            u[i][5]/=1+pipe.friction*fabs(u[i][5]/rho)*h/(2*pipe.diameter);
+            u[i][5]/=1+friction*fabs(u[i][5]/rho)*h/(2*diameter);
             // Keep total energy: friction converts bulk kinetic energy to heat.
         }
         __syncthreads();
         dt-=h;
     }
     if(i<n) for(int k=0;k<8;++k) pipe.u[i][k]=u[i][k];
+    if(i==0) error[blockIdx.x]=failureCode;
 }
 void check(cudaError_t result,const char *operation) {
     if(result!=cudaSuccess) throw std::runtime_error(std::string(operation)+": "+cudaGetErrorString(result));
@@ -131,14 +137,14 @@ struct Context {
     char name[256]{};
     Context() {
         try {
+            check(cudaSetDeviceFlags(cudaDeviceMapHost),"CUDA mapped-memory mode");
             int count=0; check(cudaGetDeviceCount(&count),"CUDA device discovery");
             if(!count) throw std::runtime_error("No CUDA device available");
             check(cudaSetDevice(0),"CUDA device selection");
             cudaDeviceProp properties{}; check(cudaGetDeviceProperties(&properties,0),"CUDA device properties");
+            if(!properties.canMapHostMemory) throw std::runtime_error("CUDA device does not support mapped host memory");
             std::strncpy(name,properties.name,sizeof(name)-1);
             check(cudaStreamCreateWithFlags(&stream,cudaStreamNonBlocking),"CUDA stream");
-            check(cudaMalloc(&error,sizeof(int)),"CUDA status allocation");
-            check(cudaMallocHost(&hostError,sizeof(int)),"CUDA status staging");
             check(cudaMemcpyToSymbol(cp,gas_thermo::coefficients,sizeof(gas_thermo::coefficients)),"CUDA thermodynamic coefficients");
         } catch(...) { release(); throw; }
     }
@@ -146,8 +152,6 @@ struct Context {
         if(stream) cudaStreamSynchronize(stream);
         if(executable) cudaGraphExecDestroy(executable);
         if(graph) cudaGraphDestroy(graph);
-        if(device) cudaFree(device);
-        if(error) cudaFree(error);
         if(host) cudaFreeHost(host);
         if(hostError) cudaFreeHost(hostError);
         if(stream) cudaStreamDestroy(stream);
@@ -157,19 +161,17 @@ struct Context {
         check(cudaStreamSynchronize(stream),"CUDA resize synchronization");
         if(executable) {cudaGraphExecDestroy(executable); executable=nullptr;}
         if(graph) {cudaGraphDestroy(graph); graph=nullptr;}
-        if(device) {cudaFree(device); device=nullptr;}
-        if(host) {cudaFreeHost(host); host=nullptr;}
+        if(host) {cudaFreeHost(host); host=nullptr; device=nullptr;}
+        if(hostError) {cudaFreeHost(hostError); hostError=nullptr; error=nullptr;}
         batchCount=0;
         const size_t bytes=static_cast<size_t>(count)*sizeof(Pipe);
-        check(cudaMalloc(&device,bytes),"CUDA pipe allocation");
-        check(cudaMallocHost(&host,bytes),"CUDA staging allocation");
+        check(cudaHostAlloc(&host,bytes,cudaHostAllocMapped),"CUDA mapped pipe allocation");
+        check(cudaHostGetDevicePointer(&device,host,0),"CUDA mapped pipe address");
+        check(cudaHostAlloc(&hostError,count*sizeof(int),cudaHostAllocMapped),"CUDA mapped status allocation");
+        check(cudaHostGetDevicePointer(&error,hostError,0),"CUDA mapped status address");
         check(cudaStreamBeginCapture(stream,cudaStreamCaptureModeThreadLocal),"CUDA graph capture");
-        check(cudaMemcpyAsync(device,host,bytes,cudaMemcpyHostToDevice,stream),"CUDA upload");
-        check(cudaMemsetAsync(error,0,sizeof(int),stream),"CUDA clear status");
         solve<<<count,64,0,stream>>>(device,error);
         check(cudaGetLastError(),"CUDA pipe launch");
-        check(cudaMemcpyAsync(host,device,bytes,cudaMemcpyDeviceToHost,stream),"CUDA download");
-        check(cudaMemcpyAsync(hostError,error,sizeof(int),cudaMemcpyDeviceToHost,stream),"CUDA status download");
         check(cudaStreamEndCapture(stream,&graph),"CUDA graph finish");
         check(cudaGraphInstantiate(&executable,graph,nullptr,nullptr,0),"CUDA graph instantiation");
         batchCount=count;
@@ -190,12 +192,19 @@ void advance(Pipe *pipes,int count,double dt) {
             throw std::invalid_argument("Invalid CUDA pipe geometry");
     auto &c=context();
     c.prepare(count);
-    const size_t bytes=static_cast<size_t>(count)*sizeof(Pipe);
-    std::memcpy(c.host,pipes,bytes);
-    for(int i=0;i<count;++i) c.host[i].timestep=dt;
+    for(int i=0;i<count;++i) {
+        auto &out=c.host[i]; const auto &in=pipes[i];
+        out.count=in.count; out.dx=in.dx; out.diameter=in.diameter;
+        out.friction=in.friction; out.fuelMass=in.fuelMass; out.timestep=dt;
+        std::memcpy(out.u,in.u,in.count*sizeof(in.u[0]));
+    }
     check(cudaGraphLaunch(c.executable,c.stream),"CUDA pipe graph launch");
     check(cudaStreamSynchronize(c.stream),"CUDA pipe completion");
-    if(*c.hostError) throw std::runtime_error(*c.hostError==1 ? "CUDA pipe exceeded substep limit" : ("CUDA pipe positivity failure, diagnostic code "+std::to_string(*c.hostError)).c_str());
-    std::memcpy(pipes,c.host,bytes);
+    for(int i=0;i<count;++i) {
+        if(c.hostError[i]==1) throw std::runtime_error("CUDA pipe exceeded substep limit");
+        if(c.hostError[i]) throw std::runtime_error("CUDA pipe positivity failure, diagnostic code "+std::to_string(c.hostError[i]));
+    }
+    for(int i=0;i<count;++i)
+        std::memcpy(pipes[i].u,c.host[i].u,pipes[i].count*sizeof(pipes[i].u[0]));
 }
 }
