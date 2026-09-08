@@ -17,6 +17,7 @@
 #include "../include/wave_reader.h"
 #include <memory>
 #include <limits>
+#include <fstream>
 
 #include "../scripting/include/compiler.h"
 
@@ -29,6 +30,28 @@
 #endif
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
+
+namespace {
+[[noreturn]] void startupFailure(const std::string &message) {
+    {
+        std::ofstream log("error_log.log", std::ios::app);
+        log << "Startup failed: " << message << '\n';
+    }
+    MessageBoxA(nullptr, message.c_str(), "Engine Sim - startup failed", MB_OK | MB_ICONERROR);
+    // DeltaEngine::Destroy and its destructors require complete initialization.
+    // Terminate this failed startup without unwinding partially created graphics
+    // objects; Windows reclaims the process resources.
+    std::exit(EXIT_FAILURE);
+}
+
+void checkStartup(ysError error, const char *stage) {
+    if (error != ysError::None) {
+        startupFailure(std::string(stage) + " failed (error "
+            + std::to_string(static_cast<int>(error)) + ").\n"
+            "Check that the complete package was extracted and DirectX 11 is available.");
+    }
+}
+}
 
 EngineSimApplication::EngineSimApplication() {
     m_assetPath = "";
@@ -101,14 +124,22 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     if (confPath.Exists()) {
         std::fstream confFile(confPath.ToString(), std::ios::in);
 
-        std::getline(confFile, enginePath);
-        std::getline(confFile, m_assetPath);
+        if (!std::getline(confFile, enginePath) || !std::getline(confFile, m_assetPath)
+            || enginePath.empty() || m_assetPath.empty()) {
+            startupFailure("Invalid delta.conf: expected an engine directory and an assets directory on separate lines.");
+        }
         enginePath = modulePath.Append(enginePath).ToString();
         m_assetPath = modulePath.Append(m_assetPath).ToString();
 
         confFile.close();
     }
 
+    if (!dbasic::Path(enginePath).Append("fonts/dc_font_consolas.png").Exists()
+        || !dbasic::Path(enginePath).Append("shaders").Exists()
+        || !dbasic::Path(m_assetPath).Exists()) {
+        startupFailure("Required fonts, shaders or assets are missing.\nExtract the complete package beside the executable, or correct delta.conf.\nEngine: "
+            + enginePath + "\nAssets: " + m_assetPath);
+    }
     m_engine.GetConsole()->SetDefaultFontDirectory(enginePath + "/fonts/");
 
     const std::string shaderPath = enginePath + "/shaders/";
@@ -125,34 +156,34 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
     settings.WindowWidth = 1920;
     settings.WindowHeight = 1080;
 
-    m_engine.CreateGameWindow(settings);
+    checkStartup(m_engine.CreateGameWindow(settings), "Graphics/audio initialization");
 
-    m_engine.GetDevice()->CreateSubRenderTarget(
+    checkStartup(m_engine.GetDevice()->CreateSubRenderTarget(
         &m_mainRenderTarget,
         m_engine.GetScreenRenderTarget(),
         0,
         0,
         0,
-        0);
+        0), "Main render target creation");
 
-    m_engine.InitializeShaderSet(&m_shaderSet);
-    m_shaders.Initialize(
+    checkStartup(m_engine.InitializeShaderSet(&m_shaderSet), "Shader set initialization");
+    checkStartup(m_shaders.Initialize(
         &m_shaderSet,
         m_mainRenderTarget,
         m_engine.GetScreenRenderTarget(),
         m_engine.GetDefaultShaderProgram(),
-        m_engine.GetDefaultInputLayout());
-    m_engine.InitializeConsoleShaders(&m_shaderSet);
+        m_engine.GetDefaultInputLayout()), "Application shader initialization");
+    checkStartup(m_engine.InitializeConsoleShaders(&m_shaderSet), "Console shader initialization");
     m_engine.SetShaderSet(&m_shaderSet);
 
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
 
     m_assetManager.SetEngine(&m_engine);
 
-    m_engine.GetDevice()->CreateIndexBuffer(
-        &m_geometryIndexBuffer, sizeof(unsigned short) * 200000, nullptr);
-    m_engine.GetDevice()->CreateVertexBuffer(
-        &m_geometryVertexBuffer, sizeof(dbasic::Vertex) * 100000, nullptr);
+    checkStartup(m_engine.GetDevice()->CreateIndexBuffer(
+        &m_geometryIndexBuffer, sizeof(unsigned short) * 200000, nullptr), "Index buffer creation");
+    checkStartup(m_engine.GetDevice()->CreateVertexBuffer(
+        &m_geometryVertexBuffer, sizeof(dbasic::Vertex) * 100000, nullptr), "Vertex buffer creation");
 
     m_geometryGenerator.initialize(100000, 200000);
 
@@ -161,8 +192,8 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
 
 void EngineSimApplication::initialize() {
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
-    m_assetManager.CompileInterchangeFile((m_assetPath + "/assets").c_str(), 1.0f, true);
-    m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true);
+    checkStartup(m_assetManager.CompileInterchangeFile((m_assetPath + "/assets").c_str(), 1.0f, true), "Asset compilation");
+    checkStartup(m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true), "Asset loading");
 
     m_textRenderer.SetEngine(&m_engine);
     m_textRenderer.SetRenderer(m_engine.GetUiRenderer());
@@ -180,10 +211,13 @@ void EngineSimApplication::initialize() {
     params.m_bitsPerSample = 16;
     params.m_channelCount = 1;
     params.m_sampleRate = 44100;
+    if (m_engine.GetAudioDevice() == nullptr) startupFailure("No audio output device is available.");
     m_outputAudioBuffer =
         m_engine.GetAudioDevice()->CreateBuffer(&params, 44100);
+    if (m_outputAudioBuffer == nullptr) startupFailure("Could not create the output audio buffer.");
 
     m_audioSource = m_engine.GetAudioDevice()->CreateSource(m_outputAudioBuffer);
+    if (m_audioSource == nullptr) startupFailure("Could not create the output audio source.");
     m_audioSource->SetMode((m_simulator->getEngine() != nullptr)
         ? ysAudioSource::Mode::Loop
         : ysAudioSource::Mode::Stop);

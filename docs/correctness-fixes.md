@@ -70,3 +70,13 @@ All six curve tests also passed under WSL AddressSanitizer and
 UndefinedBehaviorSanitizer. Unused physics/crankshaft includes were removed from
 the Gaussian filter header, allowing this focused check without graphics or
 physics dependencies.
+
+## Startup diagnostics follow-up
+
+Startup now checks the configuration, required runtime folders, graphics/shader
+and asset initialization results, and returned audio buffer/source pointers.
+Failures display a dialog and append details to `error_log.log`, then terminate
+with a failure status. This intentionally avoids calling the bundled graphics
+engine's cleanup on partially initialized state; Windows reclaims resources on
+process exit. Both Windows application configurations build. Dialog behavior and
+hardware failure paths remain unverified because desktop control is paused.
