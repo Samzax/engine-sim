@@ -11,13 +11,12 @@ details are written to `error_log.log` in the working directory.
 The package includes the Microsoft release runtime and SDL libraries. A Windows
 x64 PC with DirectX 11 graphics and a working audio output is required.
 
-The GUI also imports `d3dx10_43.dll`, `d3dx11_43.dll`, and `vulkan-1.dll`, which
-are not included in this ZIP. For missing D3DX libraries, use Microsoft's
+The GUI also imports `d3dx11_43.dll`, which is not included in this ZIP.
+For a missing D3DX library, use Microsoft's
 [DirectX End-User Runtimes (June 2010)](https://www.microsoft.com/en-us/download/details.aspx?id=8109).
-Having DirectX 11 already installed does not supply those legacy helper libraries.
-The Vulkan loader normally comes with the GPU vendor's driver package; see the
-[official Vulkan Windows setup documentation](https://vulkan.lunarg.com/doc/view/1.4.309.0/windows/getting_started.html).
-The current GUI links that loader even though it renders with DirectX 11.
+Having DirectX 11 already installed does not supply that legacy helper library.
+The default build excludes unused graphics factories, so Vulkan and DirectX 10
+runtimes are no longer required.
 
 A missing DLL can stop Windows from starting the application before it can write
 `error_log.log`. `engine-sim-headless.exe` does not import SDL, D3DX or Vulkan;
@@ -25,6 +24,10 @@ it uses the bundled Microsoft runtime and does not require a graphics or audio d
 
 Developer builds generate `delta.conf` beside the executable, pointing at the
 checkout. Portable packages use their own adjacent assets without that file.
+
+Developers building Delta's other graphics backends can configure with
+`-DENGINE_SIM_D3D11_ONLY=OFF`; this restores the original device factory and its
+additional runtime dependencies. Engine Sim itself still selects DirectX 11.
 
 Startup reuses `assets/assets.ysce` when it is nonempty and at least as recent as
 the source geometry, `assets/assets.dia`. Missing, empty or older compiled files

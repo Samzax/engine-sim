@@ -55,5 +55,6 @@ the report marked pending rather than reporting success.
 
 The first run found a missing `d3dx10d_43.dll` dependency: upstream linked retail
 and debug D3DX libraries together, even in Release. The build now removes the
-SDK-only debug libraries for both configurations. Retail legacy DirectX and
-Vulkan runtime requirements still apply.
+SDK-only debug libraries for both configurations. The legacy D3DX11 runtime
+requirement still applies. The default build now excludes unused
+graphics factories and no longer imports D3DX10 or Vulkan.
