@@ -76,8 +76,7 @@ bool GeometryGenerator::generateFilledFanPolygon(
     const int faceCount = segmentCount;
     const int indexCount = faceCount * 3;
 
-    if (vertexCount + m_state.vertexPointer > m_vertexBufferSize ||
-        indexCount + m_state.indexPointer > m_indexBufferSize)
+    if (!checkCapacity(vertexCount, indexCount))
     {
         return false;
     }
@@ -146,8 +145,7 @@ bool GeometryGenerator::generateLineRing(
 
     const ysVector up = findOrthogonal(params.normal);
 
-    if (vertexCount + m_state.vertexPointer > m_vertexBufferSize ||
-        indexCount + m_state.indexPointer > m_indexBufferSize)
+    if (!checkCapacity(vertexCount, indexCount))
     {
         return false;
     }
@@ -996,8 +994,11 @@ void GeometryGenerator::writeFace(unsigned short i0, unsigned short i1, unsigned
 
 bool GeometryGenerator::checkCapacity(int vertexCount, int indexCount) {
     return
-        (vertexCount + m_state.vertexPointer) <= m_vertexBufferSize &&
-        (indexCount + m_state.indexPointer) <= m_indexBufferSize;
+        vertexCount >= 0 && indexCount >= 0 &&
+        vertexCount <= m_vertexBufferSize - m_state.vertexPointer &&
+        indexCount <= m_indexBufferSize - m_state.indexPointer &&
+        // Indices are relative to the current shape, even in a larger buffer.
+        vertexCount <= 65536 - (m_state.vertexPointer - m_state.currentShape.BaseVertex);
 }
 
 ysVector GeometryGenerator::findOrthogonal(const ysVector &v) {
