@@ -48,6 +48,10 @@ void Gauge::destroy() {
 }
 
 void Gauge::update(float dt) {
+    if (m_max <= m_min) {
+        m_needlePosition = m_needleVelocity = 0.0f;
+        return;
+    }
     const float value = std::fmaxf((float)m_min, std::fmin((float)m_max, (float)m_value));
     const float needle_s = std::powf((value - m_min) / std::abs(m_max - m_min), m_gamma);
     const float F =
@@ -62,6 +66,7 @@ void Gauge::update(float dt) {
 }
 
 void Gauge::render() {
+    if (m_max <= m_min || m_minorStep <= 0 || m_majorStep <= 0) return;
     GeometryGenerator *generator = m_app->getGeometryGenerator();
 
     const Point origin = getRenderPoint(m_bounds.getPosition(Bounds::center) + m_center);
@@ -75,15 +80,19 @@ void Gauge::render() {
 
     GeometryGenerator::Line2dParameters lineParams;
     generator->startShape();
-    for (int i = 0; i <= std::abs(m_max - m_min); i += m_minorStep) {
+    const int tickCount = static_cast<int>(std::floor((m_max - m_min) / m_minorStep + 1e-5f));
+    for (int tick = 0; tick <= tickCount; ++tick) {
+        const float i = tick * m_minorStep;
+        const float majorIndex = i / m_majorStep;
+        const bool majorTick = std::abs(majorIndex - std::round(majorIndex)) < 1e-4f;
         const float s = std::powf((float)i / std::abs(m_max - m_min), m_gamma);
         const float theta = s * m_thetaMax + (1 - s) * m_thetaMin;
 
-        const float tickLength = (i % m_majorStep) == 0
+        const float tickLength = majorTick
             ? majorTickLength
             : minorTickLength;
 
-        const float tickWidth = (i % m_majorStep) == 0
+        const float tickWidth = majorTick
             ? majorTickWidth
             : minorTickWidth;
 
@@ -98,11 +107,11 @@ void Gauge::render() {
         lineParams.y0 = inner.y;
         lineParams.y1 = outer.y;
 
-        if ((i % m_majorStep) == 0 || (i + m_minorStep) <= m_maxMinorTick) {
+        if (majorTick || (i + m_minorStep) <= m_maxMinorTick) {
             generator->generateLine2d(lineParams);
         }
 
-        if ((i % m_majorStep) == 0 && m_renderText) {
+        if (majorTick && m_renderText) {
             drawCenteredText(
                     "n",
                     Bounds(0.0f, 0.0f, unitsToPixels(text - origin) + m_bounds.getPosition(Bounds::center) + m_center, Bounds::center),

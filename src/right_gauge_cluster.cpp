@@ -374,14 +374,14 @@ void RightGaugeCluster::setUnits() {
         m_manifoldVacuumGauge->m_unit = "bar";
         m_manifoldVacuumGauge->m_gauge->m_min = 0;
         m_manifoldVacuumGauge->m_gauge->m_max = 1.1f;
-        m_manifoldVacuumGauge->m_gauge->m_minorStep = 1;
-        m_manifoldVacuumGauge->m_gauge->m_majorStep = 1;
+        m_manifoldVacuumGauge->m_gauge->m_minorStep = 0.05f;
+        m_manifoldVacuumGauge->m_gauge->m_majorStep = 0.1f;
         m_manifoldVacuumGauge->m_precision = 2;
 
         m_manifoldVacuumGauge->m_gauge->setBand(
             { m_app->getRed(), 0.8f, 1.1f, 3.0f, 6.0f, shortenAngle, shortenAngle }, 0);
         m_manifoldVacuumGauge->m_gauge->setBand(
-            { m_app->getForegroundColor(), -1.0f, 1.0f, 3.0f, 6.0f, shortenAngle, shortenAngle }, 1);
+            { m_app->getForegroundColor(), 0.98f, 1.05f, 3.0f, 6.0f, shortenAngle, shortenAngle }, 1);
         m_manifoldVacuumGauge->m_gauge->setBand(
             { m_app->getOrange(), 0.3f, 0.5f, 3.0f, 6.0f, shortenAngle, shortenAngle }, 2);
         m_manifoldVacuumGauge->m_gauge->setBand(

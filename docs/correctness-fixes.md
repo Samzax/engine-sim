@@ -382,3 +382,15 @@ zero steps produced an empty curve. A Honda fixture reproduced successful
 loading with one step and now reports a script error at the offending lobe.
 The six-step boundary still loads, and all 15 simulator regressions passed,
 including the existing cam-duration check. The default remains 100 steps.
+
+### Fractional gauge ranges
+
+Gauge limits and tick intervals now support fractional values. The manifold
+gauge's 1.1-bar limit was previously truncated to 1 because the limit was stored
+as an integer. Bar mode now uses 0.05-bar minor ticks and 0.1-bar major ticks,
+and its near-atmospheric color band spans 0.98 to 1.05 bar instead of wrapping
+around the dial from -1 to +1 bar. Tick positions are calculated from an integer
+index to avoid accumulated fractional increments. Empty ranges skip needle
+normalization and rendering. The Release application built successfully and
+the bar setting passed the isolated GUI reload/shutdown check; the captured
+frame was inspected for the fractional ticks and corrected color band.
