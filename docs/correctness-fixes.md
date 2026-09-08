@@ -364,3 +364,11 @@ fixture with zero plenum volume loaded successfully and reported roughly
 a zero-volume exhaust fixture is also rejected. All 15 simulator regressions
 and short startup runs of all 20 bundled engine fixtures passed. These checks
 cover plenum and collector geometry, not every parameter in an engine script.
+
+Engine-building `invalid_argument` exceptions are translated into script runtime
+errors at `set_engine`, after freeing the partially built engine. This is
+required for GUI reloads: the headless executable's outer exception handler
+alone does not protect the GUI. An isolated-desktop check reloaded the zero-volume
+intake fixture into a running engine, reported its source location, preserved
+the current simulator, and completed shutdown. The temporary diagnostic path
+was removed afterward; all 15 simulator regressions passed.

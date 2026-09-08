@@ -17,6 +17,8 @@
 #include "transmission_node.h"
 #include "vehicle_node.h"
 
+#include <stdexcept>
+
 namespace es_script {
 
     class SetEngineNode : public piranha::Node {
@@ -39,7 +41,15 @@ namespace es_script {
             }
 
             Engine *engine = new Engine;
-            engineNode->buildEngine(engine);
+            try {
+                engineNode->buildEngine(engine);
+            }
+            catch (const std::invalid_argument &error) {
+                engine->destroy();
+                delete engine;
+                throwError(error.what());
+                return;
+            }
             Engine *previous = Compiler::output()->engine;
             if (previous != nullptr) {
                 previous->destroy();
