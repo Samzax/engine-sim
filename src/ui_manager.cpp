@@ -28,6 +28,15 @@ void UiManager::destroy() {
 void UiManager::update(float dt) {
     m_root.update(dt);
 
+    if (!m_app->getEngine()->GetGameWindow()->IsActive()) {
+        // Focus loss cancels a drag; it must not generate a click on release.
+        m_dragStart = nullptr;
+        if (m_hover != nullptr) m_hover->onMouseLeave();
+        m_hover = nullptr;
+        m_lastMouseScroll = m_app->getEngine()->GetMouseWheel();
+        return;
+    }
+
     int mouse_x, mouse_y;
     m_app->getEngine()->GetOsMousePos(&mouse_x, &mouse_y);
 

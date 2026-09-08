@@ -324,6 +324,7 @@ target_include_directories(engine-sim-app PRIVATE "${PROJECT_BINARY_DIR}/generat
 
 add_subdirectory(dependencies)
 include(cmake/DeltaAudioFix.cmake)
+include(cmake/DeltaInputFix.cmake)
 include(cmake/DeltaGraphicsFix.cmake)
 if (WIN32)
     # Upstream links both retail and SDK-only debug D3DX libraries in every
