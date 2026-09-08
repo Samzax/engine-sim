@@ -66,7 +66,7 @@ Discord Rich Presence remains available in Release. Debug builds omit it because
   compatibility, not sustained combustion or stable idle.
 - DirectSound buffer upload/readback passed separately in Debug and Release;
   see `audio-device-check.md`. Audible quality, device disconnection/recovery,
-  GPU removal/reset and actual FFmpeg encoding remain unverified. These limits
+  GPU removal/reset and full GUI video capture remain unverified. These limits
   do not prevent normal background GUI checks.
 - Remote CI results belong to individual commits. Local checks and a previous
   successful CI run do not establish that the latest pushed revision is green.
@@ -134,7 +134,7 @@ readback succeed. A full queue previously returned no frame, but the app still
 submitted it, increasing the queue length beyond its capacity. Encoder or
 readback errors stop recording and report a status message. The video-enabled
 application translation unit passes MSVC syntax checking with the actual
-dependency headers; end-to-end FFmpeg encoding has not been verified.
+dependency headers; full GUI capture into the encoder has not been verified.
 
 The pinned video queue also retained its stopped flag when initialized for a
 second recording, causing empty-queue reads to return immediately and the
@@ -143,6 +143,17 @@ generated source copy when video capture is enabled. A standalone check using
 the dependency's actual queue reproduced the failure on the second recording;
 the patched queue waited for and delivered frames on both recordings. This
 checks queue restart behavior independently of FFmpeg or the desktop.
+
+The generated encoder copy also uses const codec/output-format descriptors,
+matching current FFmpeg APIs. The original source failed MSVC compilation
+against FFmpeg 9.0.1; the patched recorder library and demo linked successfully.
+Using the development files from the [Gyan shared build](https://www.gyan.dev/ffmpeg/builds/),
+a background check encoded two successive software H.264 recordings with the
+same encoder instance. FFprobe counted 30 frames at 64x64 in each file, and
+FFmpeg decoded both without errors. This verifies encoding and queue reuse,
+but does not yet verify GUI frame capture or hardware encoding. The downloaded
+SDK remains under the ignored build directory; the default package still has
+video capture disabled.
 
 In builds without video capture, the recording shortcut now reports that the
 feature is unavailable instead of silently setting the recording flag. Enabled
