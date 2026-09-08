@@ -43,6 +43,20 @@ foreach(_declaration "AVCodec **codec" "AVCodec *videoCodec" "AVOutputFormat *fm
     endif()
     string(REPLACE "${_declaration}" "const ${_declaration}" _encoder_code "${_encoder_code}")
 endforeach()
+set(_packed_copy [=[    memcpy(
+        target->data[0],
+        src->m_rgb,
+        (size_t)src->m_width * src->m_height * pixelSize);]=])
+set(_strided_copy [=[    const size_t rowBytes = (size_t)src->m_width * pixelSize;
+    for (int y = 0; y < src->m_height; ++y) {
+        memcpy(target->data[0] + (size_t)y * target->linesize[0],
+            src->m_rgb + (size_t)y * rowBytes, rowBytes);
+    }]=])
+string(FIND "${_encoder_code}" "${_packed_copy}" _match)
+if (_match EQUAL -1)
+    message(FATAL_ERROR "Video frame copy changed; review cmake/VideoCaptureFix.cmake")
+endif()
+string(REPLACE "${_packed_copy}" "${_strided_copy}" _encoder_code "${_encoder_code}")
 string(REPLACE "\"../include/" "\"${_video_dir}/include/" _encoder_code "${_encoder_code}")
 set(_patched_encoder "${PROJECT_BINARY_DIR}/dependency-fixes/encoder.cpp")
 set(_previous_encoder "")

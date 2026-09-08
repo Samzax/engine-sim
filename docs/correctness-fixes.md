@@ -156,6 +156,12 @@ queue reuse; the subsequent GUI capture check is documented in `gui-check.md`. T
 SDK remains under the ignored build directory; the default package still has
 video capture disabled.
 
+RGB frame uploads now copy one row at a time using FFmpeg's destination stride.
+The original packed copy ignored row padding: a 66x64 software recording of a
+uniform gray frame decoded with a black bottom row. With the generated-source
+fix, every decoded row had the expected brightness. This also applies to RGBA
+window capture when its packed row width differs from FFmpeg's alignment.
+
 In builds without video capture, the recording shortcut now reports that the
 feature is unavailable instead of silently setting the recording flag. Enabled
 builds reject recording dimensions when either dimension is nonpositive, and
