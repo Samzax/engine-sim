@@ -1162,8 +1162,11 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    const int gearStep = m_engine.ProcessKeyDown(ysKey::Code::Up) ? 1
-        : m_engine.ProcessKeyDown(ysKey::Code::Down) ? -1 : 0;
+    // Consume both transitions so an opposing press cannot linger until the
+    // next frame. Simultaneous up/down requests cancel each other.
+    const bool shiftUp = m_engine.ProcessKeyDown(ysKey::Code::Up);
+    const bool shiftDown = m_engine.ProcessKeyDown(ysKey::Code::Down);
+    const int gearStep = static_cast<int>(shiftUp) - static_cast<int>(shiftDown);
     if (gearStep != 0) {
         Transmission *transmission = m_simulator->getTransmission();
         const int previousGear = transmission->getGear();
