@@ -73,6 +73,8 @@ class Engine : public Part {
         virtual double getExhaustO2() const;
         virtual double getRpm() const;
         virtual double getSpeed() const;
+        double getVehicleSpeed() const { return m_vehicleSpeed; }
+        void setVehicleSpeed(double speed) { m_vehicleSpeed = speed; }
         virtual bool isSpinningCw() const;
 
         virtual void resetFuelConsumption();
@@ -120,6 +122,7 @@ class Engine : public Part {
 
     protected:
         std::string m_name;
+        double m_vehicleSpeed = 0.0;
 
         Crankshaft *m_crankshafts;
         int m_crankshaftCount;

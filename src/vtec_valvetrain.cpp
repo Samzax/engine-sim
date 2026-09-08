@@ -62,5 +62,6 @@ bool VtecValvetrain::isVtecEnabled() const {
     return
         m_engine->getManifoldPressure() > m_manifoldVacuum
         && m_engine->getSpeed() > m_minRpm
+        && m_engine->getVehicleSpeed() >= m_minSpeed
         && (1 - m_engine->getThrottle()) > m_minThrottlePosition;
 }

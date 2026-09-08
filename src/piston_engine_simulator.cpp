@@ -94,6 +94,7 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
 
     m_transmission->addToSystem(m_system, &m_vehicleMass, m_vehicle, m_engine);
     m_vehicle->addToSystem(m_system, &m_vehicleMass);
+    m_engine->setVehicleSpeed(0.0);
 
     m_vehicleDrag.initialize(&m_vehicleMass, m_vehicle);
     m_system->addConstraint(&m_vehicleDrag);

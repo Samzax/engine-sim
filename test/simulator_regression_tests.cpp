@@ -4,6 +4,7 @@
 #include "../include/piston_engine_simulator.h"
 #include "../include/constants.h"
 #include "../include/vehicle_drag_constraint.h"
+#include "../include/vtec_valvetrain.h"
 #include <memory>
 #include <limits>
 #include <stdexcept>
@@ -19,6 +20,31 @@ struct EngineOwner {
         delete output.transmission;
     }
 };
+}
+
+TEST(SimulatorRegression, VtecRespectsMinimumVehicleSpeed) {
+    struct RunningEngine : Engine {
+        double getManifoldPressure() const override { return units::pressure(1, units::atm); }
+        double getSpeed() const override { return units::rpm(7000); }
+        double getThrottle() const override { return 0.0; }
+    } engine;
+    Camshaft normal, high;
+    VtecValvetrain valvetrain;
+    VtecValvetrain::Parameters parameters{};
+    parameters.engine = &engine;
+    parameters.intakeCamshaft = parameters.exhaustCamshaft = &normal;
+    parameters.vtecIntakeCamshaft = parameters.vtexExhaustCamshaft = &high;
+    parameters.minSpeed = 10 * units::mile / units::hour;
+    valvetrain.initialize(parameters);
+    EXPECT_EQ(valvetrain.getActiveIntakeCamshaft(), &normal);
+    engine.setVehicleSpeed(11 * units::mile / units::hour);
+    EXPECT_EQ(valvetrain.getActiveIntakeCamshaft(), &high);
+    engine.setVehicleSpeed(9 * units::mile / units::hour);
+    EXPECT_EQ(valvetrain.getActiveExhaustCamshaft(), &normal);
+    parameters.minSpeed = 0;
+    valvetrain.initialize(parameters);
+    engine.setVehicleSpeed(0);
+    EXPECT_EQ(valvetrain.getActiveExhaustCamshaft(), &high);
 }
 
 TEST(SimulatorRegression, RodCenterOfMassPreservesPinSpacing) {

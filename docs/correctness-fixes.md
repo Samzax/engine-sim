@@ -328,3 +328,14 @@ cams. This runs before engine allocation. A four-cylinder fixture with only
 three intake lobes was previously accepted even though valve evaluation indexed
 the missing fourth lobe; it now reports a script error with source locations.
 All 14 simulator regressions and short runs of 20 bundled engines passed.
+
+### VTEC vehicle-speed threshold
+
+The previously unused `min_speed` setting now participates in VTEC activation.
+The simulator supplies current vehicle speed after each physics step; a newly
+loaded engine starts with zero vehicle speed. The regression reproduces the
+old activation below a 10 mph threshold and checks activation above it,
+deactivation below it, and stationary operation with `min_speed: 0`.
+The default script threshold remains 10 mph, so stationary engine-dyno users
+who want VTEC activation must explicitly set it to zero. RPM, manifold pressure,
+and throttle conditions still apply. All 15 simulator regressions passed.

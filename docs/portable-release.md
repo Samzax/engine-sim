@@ -12,6 +12,11 @@ Details are written to `error_log.log` in the working directory.
 Press Up Arrow or Down Arrow to shift gears. Opposing shift presses received
 in the same frame cancel each other, without queuing a shift for the next frame.
 
+VTEC activation respects the valvetrain's `min_speed` setting (10 mph by default),
+along with its RPM, manifold-pressure, and throttle requirements. For stationary
+engine-dyno work, set `min_speed: 0` in the script's `vtec_valvetrain(...)` to
+allow activation without vehicle movement.
+
 Hold 1 through 5 for progressively slower simulation, down to 1/1000 speed.
 Release the key to return to normal speed. Fractional physics steps are retained
 between display frames, so the slowest settings no longer advance one step per

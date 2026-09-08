@@ -96,6 +96,7 @@ void Engine::initialize(const Parameters &params) {
 }
 
 void Engine::destroy() {
+    m_vehicleSpeed = 0.0;
     for (int i = 0; i < m_cylinderBankCount; ++i) m_heads[i].destroy();
     for (int i = 0; i < m_crankshaftCount; ++i) {
         m_crankshafts[i].destroy();
