@@ -18,6 +18,7 @@
 #include <memory>
 #include <fstream>
 #include <filesystem>
+#include <cstring>
 
 #include "../scripting/include/compiler.h"
 
@@ -32,6 +33,61 @@
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
 namespace {
+bool validGeometryCache(const std::filesystem::path &path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return false;
+    const auto length = file.tellg();
+    if (length < static_cast<std::streamoff>(sizeof(dbasic::CompiledHeader))) return false;
+    uint64_t remaining = static_cast<uint64_t>(length);
+    file.seekg(0);
+    const auto read = [&](void *data, size_t size) {
+        if (size > remaining || !file.read(static_cast<char *>(data), size)) return false;
+        remaining -= size;
+        return true;
+    };
+    const auto skip = [&](uint64_t size) {
+        if (size > remaining) return false;
+        file.seekg(static_cast<std::streamoff>(size), std::ios::cur);
+        remaining -= size;
+        return static_cast<bool>(file);
+    };
+    dbasic::CompiledHeader scene{};
+    if (!read(&scene, sizeof(scene)) || scene.ObjectCount <= 0
+        || static_cast<uint64_t>(scene.ObjectCount) > remaining / sizeof(ysGeometryExportFile::ObjectOutputHeader))
+        return false;
+    uint64_t vertexBytes = 0, indexBytes = 0;
+    for (int i = 0; i < scene.ObjectCount; ++i) {
+        ysGeometryExportFile::ObjectOutputHeader object{};
+        if (!read(&object, sizeof(object))
+            || !std::memchr(object.ObjectName, 0, sizeof(object.ObjectName))
+            || !std::memchr(object.ObjectMaterial, 0, sizeof(object.ObjectMaterial))
+            || object.ParentIndex < -1 || object.ParentIndex >= scene.ObjectCount
+            || object.ParentInstanceIndex < -1 || object.ParentInstanceIndex >= scene.ObjectCount)
+            return false;
+        const auto type = static_cast<ysObjectData::ObjectType>(object.ObjectType);
+        if (type == ysObjectData::ObjectType::Geometry) {
+            if (object.NumVertices <= 0 || object.VertexDataSize <= 0
+                || object.VertexDataSize % object.NumVertices != 0
+                || object.NumFaces < 0 || object.NumBones < 0) return false;
+            const uint64_t stride = object.VertexDataSize / object.NumVertices;
+            vertexBytes = ((vertexBytes + stride - 1) / stride) * stride + object.VertexDataSize;
+            indexBytes += static_cast<uint64_t>(object.NumFaces) * 3 * sizeof(unsigned short);
+            // Match the pinned loader's fixed GPU/staging capacities.
+            if (vertexBytes > 4 * 1024 * 1024 || indexBytes > 1024 * 1024) return false;
+            if (!skip(static_cast<uint64_t>(object.VertexDataSize)
+                    + static_cast<uint64_t>(object.NumFaces) * 3 * sizeof(unsigned short)
+                    + static_cast<uint64_t>(object.NumBones) * sizeof(int))) return false;
+        }
+        else if (type == ysObjectData::ObjectType::Light) {
+            if (!skip(sizeof(ysInterchangeObject::Light))) return false;
+        }
+        else if (type != ysObjectData::ObjectType::Bone && type != ysObjectData::ObjectType::Group
+            && type != ysObjectData::ObjectType::Instance && type != ysObjectData::ObjectType::Empty)
+            return false;
+    }
+    return remaining == 0;
+}
+
 bool diagnosticErrors = false;
 [[noreturn]] void startupFailure(const std::string &message, bool duringStartup = true) {
     {
@@ -251,11 +307,12 @@ void EngineSimApplication::initialize() {
         rebuildGeometry = static_cast<bool>(cacheError) || sourceTime > cacheTime;
     }
     if (!rebuildGeometry) {
-        const auto cacheSize = std::filesystem::file_size(geometryCache, cacheError);
-        rebuildGeometry = static_cast<bool>(cacheError) || cacheSize == 0;
+        rebuildGeometry = !validGeometryCache(geometryCache);
     }
     if (rebuildGeometry)
         checkStartup(m_assetManager.CompileInterchangeFile(geometryPath.string().c_str(), 1.0f, true), "Asset compilation");
+    if (rebuildGeometry && !validGeometryCache(geometryCache))
+        startupFailure("Compiled geometry is incomplete or exceeds the supported buffer sizes.");
     checkStartup(m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true), "Asset loading");
 
     m_textRenderer.SetEngine(&m_engine);

@@ -30,9 +30,11 @@ Developers building Delta's other graphics backends can configure with
 additional runtime dependencies. Engine Sim itself still selects DirectX 11.
 SDL runtime DLLs and their licenses are packaged only with that option disabled.
 
-Startup reuses `assets/assets.ysce` when it is nonempty and at least as recent as
-the source geometry, `assets/assets.dia`. Missing, empty or older compiled files
-are rebuilt automatically. If you change the geometry exporter or restore files
+Startup reuses `assets/assets.ysce` when its layout passes a bounds check and it
+is at least as recent as the source geometry, `assets/assets.dia`. Missing,
+truncated, unsupported or older compiled files are rebuilt automatically. The
+check covers object headers, references, payload lengths and fixed buffer limits;
+it is not a full semantic validation of arbitrary geometry. If you change the geometry exporter or restore files
 with misleading timestamps, remove `assets.ysce` to force a rebuild.
 
 For simulation and audio statistics without a window, use `engine-sim-headless.exe`.
