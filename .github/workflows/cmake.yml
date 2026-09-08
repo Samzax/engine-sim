@@ -59,7 +59,7 @@ jobs:
       - name: Build application and tests
         run: cmake --build build/windows --config ${{ matrix.configuration }} --target engine-sim-app engine-sim-headless engine-sim-test engine-sim-audio-test --parallel 2
       - name: Test
-        run: ctest --test-dir build/windows -C ${{ matrix.configuration }} --output-on-failure -R "^(audio-regressions|GasSystemTests|FunctionTests|SynthesizerTests|SimulatorRegression)"
+        run: ctest --test-dir build/windows -C ${{ matrix.configuration }} --output-on-failure --no-tests=error -R "^(audio-regressions|GasSystemTests|FunctionTests|SynthesizerTests|SimulatorRegression)"
       - name: Package portable release
         if: matrix.configuration == 'Release'
         run: cpack --config build/windows/CPackConfig.cmake -C Release -B build/packages
@@ -82,4 +82,4 @@ jobs:
       - name: Build
         run: cmake --build build/audio --parallel 2
       - name: Test
-        run: ctest --test-dir build/audio --output-on-failure
+        run: ctest --test-dir build/audio --output-on-failure --no-tests=error
