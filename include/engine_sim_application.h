@@ -90,7 +90,7 @@ class EngineSimApplication {
         ApplicationSettings* getAppSettings() { return &m_applicationSettings; }
 
     protected:
-        void loadScript();
+        void loadScript(const std::string &scriptPath = "");
         void processEngineInput();
         void renderScene();
 

@@ -21,6 +21,12 @@ child on timeout. The app accepts the internal diagnostic flag only on a desktop
 whose name starts with `EngineSimCheck_`. It mutes audio before playback, skips
 Discord initialization, runs 120 frame-loop iterations, and performs normal
 shutdown. A successful run writes `gui-check.txt` in the working directory.
+At frame 40 it reloads the configured engine through the normal reload and audio
+stop/restart path. At frame 80 it deliberately attempts to compile the assets
+directory as a script and verifies that the current simulator survives. This
+does not modify engine scripts. A successful diagnostic consequently leaves an
+expected "Can't find file" entry in `error_log.log`; its process exit code and
+completion report determine success.
 Use the launcher's exit code to judge the current run; an older report may remain
 after a loader failure. Once the app starts, it replaces that report with a
 pending marker before initialization. Startup failures are recorded in

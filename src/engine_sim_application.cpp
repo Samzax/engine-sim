@@ -413,9 +413,17 @@ void EngineSimApplication::run(int maxFrames) {
             break;
         }
 
-        if (m_engine.ProcessKeyDown(ysKey::Code::Return)) {
+        if (m_engine.ProcessKeyDown(ysKey::Code::Return)
+            || (m_diagnosticMode && (frames == 40 || frames == 80))) {
+            Simulator *previous = m_simulator;
             m_audioSource->SetMode(ysAudioSource::Mode::Stop);
-            loadScript();
+            // A directory cannot be an engine script: exercise a failed load
+            // without changing the user's files, through the same audio path.
+            const bool expectedFailure = m_diagnosticMode && frames == 80;
+            loadScript(expectedFailure ? m_assetPath : "");
+            if (m_diagnosticMode && (m_iceEngine == nullptr
+                || (expectedFailure ? m_simulator != previous : m_simulator == previous)))
+                startupFailure("GUI diagnostic reload did not preserve or replace the engine as expected.");
             if (m_simulator->getEngine() != nullptr) {
                 m_audioSource->SetMode(ysAudioSource::Mode::Loop);
             }
@@ -550,6 +558,7 @@ bool EngineSimApplication::loadEngine(
                 log << "Using dry audio: missing or unsupported mono PCM16 44100 Hz impulse response.\n";
             }
         }
+
     } catch (const std::exception &error) {
         std::ofstream log("error_log.log", std::ios::app);
         log << "Unable to load replacement engine: " << error.what() << '\n';
@@ -697,7 +706,7 @@ const SimulationObject::ViewParameters &
     return m_viewParameters;
 }
 
-void EngineSimApplication::loadScript() {
+void EngineSimApplication::loadScript(const std::string &scriptPath) {
     Engine *engine = nullptr;
     Vehicle *vehicle = nullptr;
     Transmission *transmission = nullptr;
@@ -707,7 +716,7 @@ void EngineSimApplication::loadScript() {
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
     es_script::Compiler compiler;
     compiler.initialize(dbasic::Path(m_assetPath).Append("../es").ToString());
-    const bool compiled = compiler.compile(m_assetPath + "/main.mr");
+    const bool compiled = compiler.compile(scriptPath.empty() ? m_assetPath + "/main.mr" : scriptPath);
     if (compiled) {
         const es_script::Compiler::Output output = compiler.execute();
         settings = output.applicationSettings;
