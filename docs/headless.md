@@ -50,6 +50,8 @@ This is a diagnostic tool, not a substitute for graphics/audio-device testing.
 | Hayabusa, 3s starter, 20% throttle | 10.007s | 7.13s | 1419 | 0 / 441316 |
 | Ferrari V12, 1s starter, 10% throttle | 10.007s | 6.58s | 3902 | 10305 / 441300 |
 | Default Subaru, 1s starter, 10% throttle | 3.008s | 1.84s | 851 | 0 / 132664 |
+| Hayabusa, 3s starter, 20% throttle | 60.002s | 40.85s | 1358 | 0 / 2646082 |
+| Ferrari V12, 1s starter, 10% throttle | 60.008s | 38.73s | 3666 | 65985 / 2646371 |
 
 These are individual runs on this PC, not performance guarantees or certified
 engine behavior. The V12's approximately 2.3% clipping merits listening and gain
