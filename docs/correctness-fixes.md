@@ -301,3 +301,12 @@ The temporary measurement ran before physics and was removed afterward.
 All 13 simulator regressions and short load/simulation runs for 20 bundled
 engines passed. These checks establish assembly placement, not the physical
 realism of arbitrary nested-rod designs.
+
+Initial placement now rejects nonpositive/nonfinite rod lengths and geometry
+that cannot reach the cylinder axis above the bank origin, identifying the
+cylinder in the error. Previously, failed placement silently left the body at
+its default position. A nested-rod fixture with 1 mm rods and a 45-degree bank
+was accepted by the old build and reached approximately 153,000 RPM in 10 ms;
+the fixed build rejects it before physics starts. All 13 simulator regressions
+and 20 bundled short engine runs still passed. This validates the initial
+position, not clearance or reachability throughout a complete crank cycle.

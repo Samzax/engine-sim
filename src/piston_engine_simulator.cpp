@@ -9,6 +9,7 @@
 #include <set>
 #include <unordered_set>
 #include <stdexcept>
+#include <string>
 
 PistonEngineSimulator::PistonEngineSimulator() {
     m_engine = nullptr;
@@ -235,6 +236,13 @@ void PistonEngineSimulator::placeCylinder(int i) {
     Piston *piston = m_engine->getPiston(i);
     CylinderBank *bank = piston->getCylinderBank();
 
+    const auto invalidGeometry = [i]() {
+        return std::invalid_argument("Cylinder " + std::to_string(i + 1)
+            + " has invalid initial rod geometry: the rod must reach the cylinder axis above the bank origin");
+    };
+    if (!std::isfinite(rod->getLength()) || rod->getLength() <= 0)
+        throw invalidGeometry();
+
     double p_x, p_y;
     if (rod->getMasterRod() != nullptr) {
         rod->getMasterRod()->getRodJournalPositionGlobal(rod->getJournal(), &p_x, &p_y);
@@ -252,14 +260,15 @@ void PistonEngineSimulator::placeCylinder(int i) {
         - rod->getLength() * rod->getLength();
 
     const double det = b * b - 4 * a * c;
-    if (det < 0) return;
+    if (!std::isfinite(a) || a <= 0 || !std::isfinite(det) || det < 0)
+        throw invalidGeometry();
 
     const double sqrt_det = std::sqrt(det);
     const double s0 = (-b + sqrt_det) / (2 * a);
     const double s1 = (-b - sqrt_det) / (2 * a);
 
     const double s = std::max(s0, s1);
-    if (s < 0) return;
+    if (!std::isfinite(s) || s < 0) throw invalidGeometry();
 
     const double e_x = s * bank->getDx() + bank->getX();
     const double e_y = s * bank->getDy() + bank->getY();
