@@ -905,6 +905,8 @@ void EngineSimApplication::processEngineInput() {
     const int mouseWheel = m_engine.GetMouseWheel();
     const int mouseWheelDelta = mouseWheel - m_lastMouseWheel;
     m_lastMouseWheel = mouseWheel;
+    // Wheel deltas are discrete input. Preserve the old 60 FPS sensitivity.
+    const double wheelControlDelta = mouseWheelDelta / 60.0;
 
     bool fineControlInUse = false;
     if (m_engine.IsKeyDown(ysKey::Code::Z)) {
@@ -913,7 +915,7 @@ void EngineSimApplication::processEngineInput() {
             : 0.01;
 
         Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-        audioParams.volume = clamp(audioParams.volume + mouseWheelDelta * rate * dt);
+        audioParams.volume = clamp(audioParams.volume + wheelControlDelta * rate);
 
         m_simulator->synthesizer().setAudioParameters(audioParams);
         fineControlInUse = true;
@@ -926,7 +928,7 @@ void EngineSimApplication::processEngineInput() {
             : 0.01;
 
         Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-        audioParams.convolution = clamp(audioParams.convolution + mouseWheelDelta * rate * dt);
+        audioParams.convolution = clamp(audioParams.convolution + wheelControlDelta * rate);
 
         m_simulator->synthesizer().setAudioParameters(audioParams);
         fineControlInUse = true;
@@ -939,7 +941,7 @@ void EngineSimApplication::processEngineInput() {
             : 0.001;
 
         Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-        audioParams.dF_F_mix = clamp(audioParams.dF_F_mix + mouseWheelDelta * rate * dt);
+        audioParams.dF_F_mix = clamp(audioParams.dF_F_mix + wheelControlDelta * rate);
 
         m_simulator->synthesizer().setAudioParameters(audioParams);
         fineControlInUse = true;
@@ -952,7 +954,7 @@ void EngineSimApplication::processEngineInput() {
             : 0.01;
 
         Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-        audioParams.airNoise = clamp(audioParams.airNoise + mouseWheelDelta * rate * dt);
+        audioParams.airNoise = clamp(audioParams.airNoise + wheelControlDelta * rate);
 
         m_simulator->synthesizer().setAudioParameters(audioParams);
         fineControlInUse = true;
@@ -965,7 +967,7 @@ void EngineSimApplication::processEngineInput() {
             : 0.01;
 
         Synthesizer::AudioParameters audioParams = m_simulator->synthesizer().getAudioParameters();
-        audioParams.inputSampleNoise = clamp(audioParams.inputSampleNoise + mouseWheelDelta * rate * dt);
+        audioParams.inputSampleNoise = clamp(audioParams.inputSampleNoise + wheelControlDelta * rate);
 
         m_simulator->synthesizer().setAudioParameters(audioParams);
         fineControlInUse = true;
@@ -978,7 +980,7 @@ void EngineSimApplication::processEngineInput() {
             : 100.0;
 
         const double newSimulationFrequency = clamp(
-            m_simulator->getSimulationFrequency() + mouseWheelDelta * rate * dt,
+            m_simulator->getSimulationFrequency() + wheelControlDelta * rate,
             400.0, 400000.0);
 
         m_simulator->setSimulationFrequency(newSimulationFrequency);
