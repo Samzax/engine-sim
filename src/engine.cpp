@@ -412,6 +412,16 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
         || frequency > (std::numeric_limits<int>::max)())
         throw std::invalid_argument("Engine simulation frequency must be finite and within 1..INT_MAX");
 
+    const auto positive = [](double value) { return std::isfinite(value) && value > 0; };
+    const auto nonnegative = [](double value) { return std::isfinite(value) && value >= 0; };
+    if (!positive(vehicle->getMass()) || !positive(vehicle->getTireRadius())
+        || !std::isfinite(vehicle->getDiffRatio()) || vehicle->getDiffRatio() == 0)
+        throw std::invalid_argument("Vehicle requires finite positive mass and tire radius, and a finite nonzero differential ratio");
+    if (!nonnegative(vehicle->getDragCoefficient())
+        || !nonnegative(vehicle->getCrossSectionArea())
+        || !nonnegative(vehicle->getRollingResistance()))
+        throw std::invalid_argument("Vehicle drag coefficient, frontal area and rolling resistance must be finite and nonnegative");
+
     auto simulator = std::make_unique<PistonEngineSimulator>();
     Simulator::Parameters simulatorParams;
     simulatorParams.systemType = Simulator::SystemType::NsvOptimized;

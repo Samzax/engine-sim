@@ -48,6 +48,29 @@ TEST(SimulatorRegression, HayabusaAndV12Lifecycle) {
         ASSERT_TRUE(engine.output.success);
         ASSERT_NE(engine.output.vehicle, nullptr);
         ASSERT_NE(engine.output.transmission, nullptr);
+        // Reject invalid vehicle data before attaching bodies or starting audio.
+        const Vehicle *vehicle = engine.output.vehicle;
+        const Vehicle::Parameters validVehicle = {
+            vehicle->getMass(), vehicle->getDragCoefficient(), vehicle->getCrossSectionArea(),
+            vehicle->getDiffRatio(), vehicle->getTireRadius(), vehicle->getRollingResistance()
+        };
+        for (double Vehicle::Parameters::*field : {
+                &Vehicle::Parameters::mass, &Vehicle::Parameters::tireRadius,
+                &Vehicle::Parameters::diffRatio, &Vehicle::Parameters::dragCoefficient,
+                &Vehicle::Parameters::crossSectionArea, &Vehicle::Parameters::rollingResistance }) {
+            Vehicle::Parameters invalid = validVehicle;
+            invalid.*field = std::numeric_limits<double>::quiet_NaN();
+            Vehicle invalidVehicle;
+            invalidVehicle.initialize(invalid);
+            EXPECT_THROW(engine.output.engine->createSimulator(
+                &invalidVehicle, engine.output.transmission), std::invalid_argument);
+        }
+        Vehicle::Parameters massless = validVehicle;
+        massless.mass = 0;
+        Vehicle invalidVehicle;
+        invalidVehicle.initialize(massless);
+        EXPECT_THROW(engine.output.engine->createSimulator(
+            &invalidVehicle, engine.output.transmission), std::invalid_argument);
         std::unique_ptr<Simulator> simulator(engine.output.engine->createSimulator(
             engine.output.vehicle, engine.output.transmission));
         simulator->setTargetSynthesizerLatency(0);
