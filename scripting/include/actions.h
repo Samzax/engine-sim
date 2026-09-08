@@ -68,6 +68,10 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            if (m_rodJournal->getCrankshaft() != nullptr || m_rodJournal->getRod() != nullptr) {
+                throwError("Rod journal is already attached to a crankshaft or connecting rod");
+                return;
+            }
             m_crankshaft->addRodJournal(m_rodJournal);
         }
 
@@ -92,6 +96,10 @@ namespace es_script {
         virtual void _evaluate() {
             readAllInputs();
 
+            if (m_rodJournal->getCrankshaft() != nullptr || m_rodJournal->getRod() != nullptr) {
+                throwError("Rod journal is already attached to a crankshaft or connecting rod");
+                return;
+            }
             m_rod->addRodJournal(m_rodJournal);
         }
 
