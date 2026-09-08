@@ -1102,6 +1102,12 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
+    if (m_engine.ProcessKeyDown(ysKey::Code::Delete)) {
+        m_loadSimulationCluster->clearDynoResults();
+        m_oscCluster->clearDynoResults();
+        m_infoCluster->setLogMessage("Dyno peaks and plots cleared");
+    }
+
     if (m_engine.ProcessKeyDown(ysKey::Code::H)) {
         m_simulator->m_dyno.m_hold = !m_simulator->m_dyno.m_hold;
 

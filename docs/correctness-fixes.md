@@ -482,3 +482,11 @@ changes. The existing noise-channel reference was updated to remove the matching
 discarded draw, retaining its filter-state comparison. All four selected audio
 checks passed, as did the Release builds. No overall speedup is claimed without
 a workload benchmark.
+
+Delete now clears saved dyno peaks and torque/power plots without restarting the
+engine. Display filter history and plot ranges reset too; an enabled dyno resumes
+collecting new measurements immediately. A temporary isolated-desktop diagnostic
+enabled RPM hold, disabled it, then called the same clearing functions. Its final
+frame showed zero torque/power and an engine still running. The temporary control
+override was restored and the normal Release executable rebuilt. This exercised
+the clearing functions without injecting a physical Delete key.

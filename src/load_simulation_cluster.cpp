@@ -112,6 +112,12 @@ void LoadSimulationCluster::destroy() {
     UiElement::destroy();
 }
 
+void LoadSimulationCluster::clearDynoResults() {
+    m_filteredTorque = m_filteredHorsepower = 0.0;
+    m_peakTorque = m_peakHorsepower = 0.0;
+    m_peakTorqueRpm = m_peakHorsepowerRpm = 0.0;
+}
+
 void LoadSimulationCluster::update(float dt) {
     UiElement::update(dt);
 

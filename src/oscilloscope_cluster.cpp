@@ -372,6 +372,17 @@ void OscilloscopeCluster::setSimulator(Simulator *simulator) {
     m_simulator = simulator;
 }
 
+void OscilloscopeCluster::clearDynoResults() {
+    m_torque = m_power = 0.0;
+    m_updateTimer = 0.0f;
+    for (Oscilloscope *scope : {m_torqueScope, m_powerScope}) {
+        scope->reset();
+        scope->m_xMin = scope->m_yMin = scope->m_yMax = 0.0;
+    }
+    const Engine *engine = m_simulator->getEngine();
+    setDynoMaxRange(engine != nullptr ? units::toRpm(engine->getRedline()) : 0.0);
+}
+
 void OscilloscopeCluster::renderScope(
     Oscilloscope *osc,
     const Bounds &bounds,

@@ -22,6 +22,7 @@ class OscilloscopeCluster : public UiElement {
         virtual void render();
 
         void sample();
+        void clearDynoResults();
         void setSimulator(Simulator *simulator);
 
         Oscilloscope *getTotalExhaustFlowOscilloscope() const { return m_totalExhaustFlowScope; }

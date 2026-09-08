@@ -17,6 +17,7 @@ class LoadSimulationCluster : public UiElement {
         virtual void update(float dt);
         virtual void render();
         void setUnits();
+        void clearDynoResults();
 
         void setSimulator(Simulator *simulator) { m_simulator = simulator; }
 

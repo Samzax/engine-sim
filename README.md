@@ -41,6 +41,7 @@ The UI is extremely minimalistic and there are only a few controls used to inter
 | G + Scroll | Change hold speed |
 | F | Toggle fullscreen mode |
 | I | Display dyno stats in the information panel |
+| Delete | Clear dyno peaks and plots without restarting the engine |
 | Shift | Clutch (hold spacebar at the same time to slowly engage/disengage) |
 | T / U | Gradually disengage / engage the clutch |
 | Y | Hold the current clutch target after releasing T or U |

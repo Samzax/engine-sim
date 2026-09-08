@@ -26,6 +26,9 @@ along with its RPM, manifold-pressure, and throttle requirements. For stationary
 engine-dyno work, set `min_speed: 0` in the script's `vtec_valvetrain(...)` to
 allow activation without vehicle movement.
 
+Press Delete to clear stored dyno peaks and the torque/power plots without
+reloading the engine. If the dyno is enabled, new measurements resume immediately.
+
 Hold 1 through 5 for progressively slower simulation, down to 1/1000 speed.
 Release the key to return to normal speed. Fractional physics steps are retained
 between display frames, so the slowest settings no longer advance one step per
