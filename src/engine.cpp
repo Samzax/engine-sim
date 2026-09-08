@@ -408,6 +408,9 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
 
     const auto positive = [](double value) { return std::isfinite(value) && value > 0; };
     const auto nonnegative = [](double value) { return std::isfinite(value) && value >= 0; };
+    if (!nonnegative(m_dynoMinSpeed) || !nonnegative(m_dynoMaxSpeed)
+        || m_dynoMaxSpeed < m_dynoMinSpeed)
+        throw std::invalid_argument("Dyno speed limits must be finite and nonnegative, with maximum at least minimum");
     if (!positive(vehicle->getMass()) || !positive(vehicle->getTireRadius())
         || !std::isfinite(vehicle->getDiffRatio()) || vehicle->getDiffRatio() == 0)
         throw std::invalid_argument("Vehicle requires finite positive mass and tire radius, and a finite nonzero differential ratio");

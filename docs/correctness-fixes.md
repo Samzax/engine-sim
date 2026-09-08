@@ -439,3 +439,10 @@ produced 40. Sampling still occurs on display frames, so individual timestamps
 remain frame-quantized. Long frames record only the current reading, without
 inventing samples for skipped intervals. Disabling the dyno resets the timer
 so the next run samples immediately. The Release application built successfully.
+
+Dyno speed limits are now checked before simulator initialization: both must be
+finite and nonnegative, and the maximum must be at least the minimum. A Honda
+script with a 9000 RPM minimum and 1000 RPM maximum previously loaded; it now
+reports the invalid range. Equal 1000 RPM limits still load for a fixed target.
+The Release application/headless builds and all 15 simulator regression checks
+passed. This check uses the existing invalid-engine handling for GUI reloads.
