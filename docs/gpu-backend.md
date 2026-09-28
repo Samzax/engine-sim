@@ -225,6 +225,119 @@ outputs. Audio RMS/clipping varied in some runs, including repeat invocations of
 the same executable; subsequent Hayabusa repeats matched the baseline. These
 observations do not establish byte-identical audio or a speedup.
 
+### Free-running trajectory conditioning
+
+`SimulatorRegression.CoupledGpuPreservesAdaptiveFluidLoop` advanced a CPU
+reference and the coupled GPU path side by side over a free-running window
+(fluidSteps=8, four 1e-4 mechanical steps, 2/8/64 cells per pipe, no resets)
+and required every gas, thermal, flame and flow quantity to agree within 1e-7
+relative. That window failed on the Hayabusa 64-cell case from mechanical step
+2 onward, so the test is now `DISABLED_...` and runs only on request as a
+diagnostic. Investigation showed the threshold was below the fixture's own
+noise floor rather than indicating a device error.
+
+Both comparison sides run the identical CPU schedule; only the candidate's
+initial state is displaced by a controlled probe of the initial kinetic energy.
+Free-running CPU versus CPU with no probe is exact, so any difference is a real
+state difference. With the same schedule but a displacement anywhere from 1e-16
+to 1e-12, the fixture produces 289-428 over-tolerance comparisons out of
+112,640 (0.26-0.38%), with tail magnitudes of 10,000-33,000x the tolerance.
+Counts do not grow with probe size: any machine-epsilon displacement
+decorrelates this ignition fixture completely inside the four-step window.
+
+The GPU's free-running run produces 418 over-tolerance comparisons, a p99 of
+0.080x tolerance and a maximum of 33,706x tolerance - the same band as the
+CPU's own 1e-12 displacement (418, 0.076, 31,704). All of it appears in the
+Hayabusa 64-cell case; every other engine and cell count stays inside
+tolerance. Failures by mechanical step are 0, 0, 83, 334: the divergence starts
+at exactly zero and grows exponentially, which is Lyapunov amplification of
+rounding differences, not a constant offset from an incorrect update.
+
+CI therefore gates on agreement tests rather than on the absolute free-running
+threshold:
+
+- `CoupledTrajectoryCpuBaseline` - probe 0 must stay inside tolerance,
+  confirming the comparison harness is deterministic.
+- `CoupledGpuMatchesIdenticalFluidStepInputs` - one fluid step from an
+  identical state, both engines, 2/8/64 cells.
+- `CoupledSnapshotCpuControl` - stage lockstep across atmosphere, reservoir
+  ports, cylinders and pipes.
+- `CoupledTrajectoryWithinConditioningEnvelope` - runs the GPU trajectory and a
+  CPU trajectory displaced by 1e-12 in the same process and requires the GPU to
+  stay within 8x of the CPU envelope on over-tolerance count, p99 and maximum.
+  Both runs record their statistics instead of asserting, so the bound
+  recalibrates for each binary and machine. Current headroom is 418 against a
+  limit of 3,344 (count), 0.080 against 0.80 (p99) and 33,706 against 253,636
+  (max); a systematic device error would push essentially all 112,640
+  comparisons out of tolerance and fail the count check immediately.
+
+Evidence, measurement method and reproduce steps are in
+`docs/gpu-coupled-trajectory-findings.md` (raw logs and reproduce output stay
+under the ignored `build/` directory).
+
+### Phase overlaps in the coupled kernel
+
+The coupled kernel runs each fluid step as four dependent phases - atmosphere
+connections, reservoir ports, cylinders, pipes - each on lane 0 of the
+pipe-count block grid with a barrier between them. Within a reservoir the port
+chain is strictly serial (cylinder order, shared plenum/collector state), but
+two of the phase pairs commute:
+
+- **Ports and cylinders.** Reservoir-side transfers use the manifold end of a
+  pipe (intake first cell, exhaust last cell) while the cylinder stages use the
+  chamber end of the same pipes plus the chamber itself, so the two sets of
+  memory locations are disjoint whenever a cylinder's intake and exhaust pipes
+  are different pipes and every pipe has at least two cells. The kernel checks
+  both conditions and otherwise keeps the original layout.
+- **Atmospheres and cylinders.** The atmosphere connections of fluid step `f+1`
+  only read the reservoir state written by fluid step `f`'s ports and touch no
+  pipe cells, so they commute with `f`'s cylinder work.
+
+Atmospheres do **not** commute with ports: both rewrite
+`intakes[].state.system` / `exhausts[].state.system`, and `atm(f+1)` must see
+all of `ports(f)`. Running them together was tried first and the envelope gate
+caught it immediately (39,270 over-tolerance comparisons instead of 418), so the
+kernel stages atmospheres after the ports barrier rather than alongside it.
+
+Current layout: engines that satisfy the disjointness checks run ports and
+cylinders in one stage (leading blocks own reservoirs, the rest own cylinders),
+then atmospheres for the next fluid step as their own stage before the pipe
+solve. Engines that fail the checks keep separate ports and cylinder stages and
+let atmospheres ride the cylinder stage as before. `Control::lastSubstep` marks
+the substep that consumes the whole fluid step, so the atmospheres of step `f+1`
+only run during step `f`'s final substep.
+
+Verification: 64/64 CUDA tests, including the identical-input and lockstep
+snapshot comparisons; the envelope gate again reported exactly the statistics of
+the sequential layout (418 over-tolerance comparisons, p99 0.080, max 33,705.7
+out of 112,640), and the printed physics summary is unchanged (rpm 686.866,
+coolant 0.0854166 J, rms 0.481813). Racecheck reported zero hazards on
+`CoupledGpuMatchesIdenticalFluidStepInputs`, which exercises the merged
+ports/cylinder stage; racecheck over the long trajectory test and the headless
+binary did not finish within an hour, so the final atmosphere stage is gated by
+the envelope test instead.
+
+`ENGINE_SIM_GPU_PROFILE=1` buckets time into `reservoir ports`/`cylinders`
+when they keep separate stages, `merged stage` when they share one, and
+`atmospheres` for both the dedicated and the staged atmosphere work. Median
+coupled wall time for the 0.25-second starter benchmark, three runs per engine
+with timers off:
+
+| Engine | Phase 0 coupled | Atm/cyl overlap | Ports/cyl overlap |
+| --- | ---: | ---: | ---: |
+| Hayabusa | 25.481 s | 21.459 s (-15.8%) | 17.441 s (-31.6%) |
+| V12 | 20.358 s | 20.055 s (-1.5%) | 17.403 s (-14.5%) |
+
+The last column was measured on a busier machine than the first two, so it is a
+lower bound: pipe-only also runs 2.83 s against the Phase 0 2.484 s. A control
+build with only the ports/cylinder merge disabled was measured under the same
+load at 20.133 s (Hayabusa) and 18.945 s (V12), so the merge itself is worth
+-13.4% and -8.1%.
+
+The V12 improvement is smaller because its port chain is 12 sequential transfers
+per reservoir against one concurrent cylinder per block, so the overlap hides
+little; its chain remains the next bottleneck.
+
 ### Phase profiling and closed ports
 
 Configure a diagnostic build with `-DENGINE_SIM_PROFILE=ON` to print inclusive
