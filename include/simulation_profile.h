@@ -18,6 +18,18 @@ struct Counters {
     }
 };
 inline Counters &counters() {thread_local Counters value;return value;}
+struct ThermoCounters {
+    uint64_t newtonCalls=0, newtonIters=0, refreshProps=0, flowParams=0;
+    ~ThermoCounters() {
+        if (newtonCalls||newtonIters||refreshProps||flowParams)
+            std::fprintf(stderr,"THERMO newton_calls=%llu newton_iters=%llu refresh=%llu flow=%llu\n",
+                static_cast<unsigned long long>(newtonCalls),
+                static_cast<unsigned long long>(newtonIters),
+                static_cast<unsigned long long>(refreshProps),
+                static_cast<unsigned long long>(flowParams));
+    }
+};
+inline ThermoCounters &thermo() {thread_local ThermoCounters value;return value;}
 struct Scope {
     Phase phase;
     std::chrono::steady_clock::time_point start;

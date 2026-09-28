@@ -47,7 +47,8 @@ ES_GAS_FUNCTION inline View view(State &s) {
         s.exhaustFlow,s.totalExhaustFlow,s.totalIntakeFlow};
 }
 ES_GAS_FUNCTION inline void begin(View s,const Parameters &p,double dt) {
-    if(s.system.temperature()>s.peakTemperature) s.peakTemperature=s.system.temperature();
+    const double t=s.system.temperature();
+    if(t>s.peakTemperature) s.peakTemperature=t;
     s.thermal.exchange(s.system,p.surfaceArea,p.meanPistonSpeed,dt);
     s.system.flow(p.blowbyK,dt,p.crankcasePressure,units::celcius(25.0));
 }
@@ -103,11 +104,12 @@ ES_GAS_FUNCTION inline void finish(View s,const Parameters &p,double intakeFlow,
 ES_GAS_FUNCTION inline void advanceDistributed(View s,const Parameters &p,
     GasSystem &intake,GasSystem &exhaust,double dt) {
     begin(s,p,dt);
-    GasSystem::FlowParameters flow{p.intakeK,dt,1,0,p.intakeArea,p.volume/p.cylinderHeight,&intake,&s.system};
+    const double cylinderFace=p.volume/p.cylinderHeight;
+    GasSystem::FlowParameters flow{p.intakeK,dt,1,0,p.intakeArea,cylinderFace,&intake,&s.system};
     const double intakeFlow=GasSystem::flow(flow);
     s.system.dissipateExcessVelocity();
     flow.k_flow=p.exhaustK;
-    flow.crossSectionArea_0=p.volume/p.cylinderHeight;
+    flow.crossSectionArea_0=cylinderFace;
     flow.crossSectionArea_1=p.exhaustArea;
     flow.system_0=&s.system; flow.system_1=&exhaust;
     const double exhaustFlow=GasSystem::flow(flow);

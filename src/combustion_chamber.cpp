@@ -338,6 +338,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPorts
 
     GasSystem::FlowParameters flowParams;
     flowParams.dt = dt;
+    const double cylinderFace = volume / cylinderHeight;
 
     if (!reservoirPortsDone) flowIntakeReservoir(dt);
 
@@ -345,7 +346,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPorts
 
     flowParams.k_flow = m_intakeFlowRate;
     flowParams.crossSectionArea_0 = m_head->getIntakeRunnerCrossSectionArea();
-    flowParams.crossSectionArea_1 = volume / cylinderHeight;
+    flowParams.crossSectionArea_1 = cylinderFace;
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;
     flowParams.system_0 = intakeOut;
@@ -356,7 +357,7 @@ void CombustionChamber::flowStep(double dt, bool deferPipes, bool reservoirPorts
     m_system.dissipateExcessVelocity();
 
     flowParams.k_flow = m_exhaustFlowRate;
-    flowParams.crossSectionArea_0 = volume / cylinderHeight;
+    flowParams.crossSectionArea_0 = cylinderFace;
     flowParams.crossSectionArea_1 = m_head->getExhaustRunnerCrossSectionArea();
     flowParams.direction_x = 1.0;
     flowParams.direction_y = 0.0;

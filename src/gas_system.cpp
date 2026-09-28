@@ -3,9 +3,13 @@
 #include "../include/units.h"
 #include "../include/utilities.h"
 #include "../include/gas_thermo.h"
+#include "../include/simulation_profile.h"
 
 #include <cmath>
 #include <cassert>
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 ES_GAS_DEFINITION void GasSystem::refreshFlowConstants(double gamma) const {
     if(m_flowGamma==gamma) return;
@@ -35,8 +39,27 @@ ES_GAS_DEFINITION double GasSystem::mixtureCv(double t, const Mix &m) {
 
 ES_GAS_NOINLINE_DEFINITION void GasSystem::refreshProperties() const {
     if (m_propertiesValid) return;
+#ifdef ENGINE_SIM_PROFILE
+    ++simulation_profile::thermo().refreshProps;
+#endif
     const Mix &m = m_state.mix;
     const double weights[5] = {m.p_inert-m.p_co2-m.p_h2o, m.p_o2, m.p_co2, m.p_h2o, m.p_fuel};
+#if defined(__AVX2__)
+    // Blend species coefficients over k in one ymm; lanes keep the s=0..4
+    // accumulation order of the scalar loop and stay FMA-free.
+    __m256d low=_mm256_setzero_pd(), high=_mm256_setzero_pd();
+    double low4=0, high4=0;
+    for (int s=0; s<5; ++s) {
+        const double w=weights[s];
+        const __m256d wv=_mm256_set1_pd(w);
+        low=_mm256_add_pd(low,_mm256_mul_pd(wv,_mm256_loadu_pd(gas_thermo::coefficientsAt(s,0))));
+        high=_mm256_add_pd(high,_mm256_mul_pd(wv,_mm256_loadu_pd(gas_thermo::coefficientsAt(s,1))));
+        low4+=w*gas_thermo::coefficientsAt(s,0)[4];
+        high4+=w*gas_thermo::coefficientsAt(s,1)[4];
+    }
+    _mm256_storeu_pd(m_lowCp,low); m_lowCp[4]=low4;
+    _mm256_storeu_pd(m_highCp,high); m_highCp[4]=high4;
+#else
     for (int k=0; k<5; ++k) {
         m_lowCp[k] = m_highCp[k] = 0;
         for (int s=0; s<5; ++s) {
@@ -44,6 +67,7 @@ ES_GAS_NOINLINE_DEFINITION void GasSystem::refreshProperties() const {
             m_highCp[k] += weights[s]*gas_thermo::coefficientsAt(s,1)[k];
         }
     }
+#endif
     m_cv200 = gas_thermo::cvPolynomial(m_lowCp, 200);
     m_cv6000 = gas_thermo::cvPolynomial(m_highCp, 6000);
     m_u200 = 200*m_cv200;
@@ -95,7 +119,13 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::temperature() const {
     const double target = (std::max)(0.0, kineticEnergy() / n());
     double lower = 0, upper = (std::max)(6000.0, target / constants::R);
     double t = std::clamp(m_cachedTemperature, lower, upper);
+#ifdef ENGINE_SIM_PROFILE
+    ++simulation_profile::thermo().newtonCalls;
+#endif
     for (int i = 0; i < 32; ++i) {
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().newtonIters;
+#endif
         const double residual = molarEnergy(t) - target;
         if (std::abs(residual) <= 1e-10 * (std::max)(1.0, target)) break;
         if (residual > 0) upper = t; else lower = t;
@@ -524,6 +554,9 @@ ES_GAS_DEFINITION void GasSystem::dissipateVelocity(double dt, double timeConsta
 }
 
 ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(const FlowParameters &params) {
+#ifdef ENGINE_SIM_PROFILE
+    ++simulation_profile::thermo().flowParams;
+#endif
     // A closed port cannot exchange mass or momentum. Keep the existing path
     // for temporarily negative sensible energy, which applies the energy floor.
     if (params.k_flow == 0 && params.system_0->kineticEnergy() >= 0
@@ -582,8 +615,9 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(const FlowParameters &params) 
 
     const double fraction = flow / source->n();
     const double fractionVolume = fraction * source->volume();
-    const double fractionMass = fraction * source->mass();
-    const double remainingMass = (1 - fraction) * source->mass();
+    const double sourceMassAtSplit = source->mass();
+    const double fractionMass = fraction * sourceMassAtSplit;
+    const double remainingMass = (1 - fraction) * sourceMassAtSplit;
 
     if (flow != 0) {
         // - Stage 1
