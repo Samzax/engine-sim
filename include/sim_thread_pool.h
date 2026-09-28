@@ -2,6 +2,7 @@
 #define ENGINE_SIM_SIM_THREAD_POOL_H
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -45,12 +46,14 @@ class Pool {
         int size() const { return m_threadCount; }
 
         template <class F>
-        void run(int count, const F &fn) {
+        void run(int count, bool pull, const F &fn) {
             m_count = count;
             m_context = &fn;
             m_call = [](const void *context, int i) {
                 (*static_cast<const F *>(context))(i);
             };
+            m_next.store(0, std::memory_order_relaxed);
+            m_pull.store(pull, std::memory_order_relaxed);
             m_epoch.fetch_add(1, std::memory_order_release);
             {
                 // Lock/unlock pairs the epoch store with parked workers so a
@@ -59,13 +62,27 @@ class Pool {
             }
             m_wake.notify_all();
 
-            const int lo = slice(0, count);
-            const int hi = slice(1, count);
             // Exceptions (e.g. positivity errors from the serial physics) must
             // not escape a worker thread (that would terminate); the first one
             // wins and is rethrown on the caller after the barrier.
             try {
-                for (int i = lo; i < hi; ++i) fn(i);
+                if (pull) {
+                    // Dynamic index pull for heterogeneous units (a port chain
+                    // or a reservoir can dominate a static slice): each thread
+                    // takes the next index, so arrival skew collapses while
+                    // per-index work stays unchanged and disjoint. On balanced
+                    // regions the contended counter costs more than it saves,
+                    // so those use static slices.
+                    for (;;) {
+                        const int i = m_next.fetch_add(1, std::memory_order_relaxed);
+                        if (i >= count) break;
+                        fn(i);
+                    }
+                } else {
+                    const int lo = slice(0, count);
+                    const int hi = slice(1, count);
+                    for (int i = lo; i < hi; ++i) fn(i);
+                }
             } catch (...) {
                 captureException();
             }
@@ -87,8 +104,10 @@ class Pool {
             if (hardware > 0 && threads > static_cast<int>(hardware)) {
                 threads = static_cast<int>(hardware);
             }
-            // SMT siblings oversubscribe the barrier: extra threads spin on
-            // region gaps and throttle the slices, so cap at physical cores.
+            // SMT siblings oversubscribe the barrier: retested 2026-09-28 with
+            // the spin-then-park barrier and dynamic pull (t12/t16 on 8 physical
+            // cores) and still slower than physical cores alone - t12 ~10-30%
+            // worse, t16 ~5x worse (barrier wait explodes), so cap at physical.
             const int physical = physicalCoreCount();
             if (physical > 0 && threads > physical) {
                 std::printf("[sim] ENGINE_SIM_THREADS clamped %d -> %d physical cores\n",
@@ -98,6 +117,12 @@ class Pool {
             m_threadCount = threads;
             if (threads <= 1) return;
             std::printf("[sim] ENGINE_SIM_THREADS=%d\n", threads);
+#ifdef ENGINE_SIM_PROFILE
+            // Per-participant barrier wait accounting (printed at exit):
+            // slot 0 = caller, slots 1..T-1 = workers. Single-writer per slot.
+            m_waitSlots.assign(static_cast<size_t>(threads), WaitSlot{});
+            slotIndex() = 0;
+#endif
             m_workers.reserve(threads - 1);
             for (int t = 1; t < threads; ++t) {
                 m_workers.emplace_back(&Pool::workerLoop, this, t);
@@ -113,10 +138,50 @@ class Pool {
             for (std::thread &worker : m_workers) {
                 if (worker.joinable()) worker.join();
             }
+#ifdef ENGINE_SIM_PROFILE
+            double sum = 0.0;
+            long long calls = 0;
+            for (const WaitSlot &slot : m_waitSlots) {
+                sum += slot.seconds;
+                calls += slot.calls;
+            }
+            if (calls > 0) {
+                std::printf(
+                    "[sim] barrier: %lld calls, wall %.6fs, avg %.2fus per call "
+                    "(%lld barriers over %d threads)\n",
+                    calls, sum / m_threadCount,
+                    1e6 * sum / static_cast<double>(calls),
+                    calls / m_threadCount, m_threadCount);
+            }
+#endif
         }
 
         Pool(const Pool &) = delete;
         Pool &operator=(const Pool &) = delete;
+
+#ifdef ENGINE_SIM_PROFILE
+        struct WaitSlot {
+            double seconds = 0.0;
+            long long calls = 0;
+        };
+        static int &slotIndex() {
+            static thread_local int slot = -1;
+            return slot;
+        }
+        struct WaitRecorder {
+            WaitSlot *m_slot;
+            std::chrono::steady_clock::time_point m_start;
+            explicit WaitRecorder(WaitSlot *slot)
+                : m_slot(slot), m_start(std::chrono::steady_clock::now()) {}
+            ~WaitRecorder() {
+                if (m_slot) {
+                    m_slot->seconds += std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - m_start).count();
+                    ++m_slot->calls;
+                }
+            }
+        };
+#endif
 
         static int physicalCoreCount() {
 #if defined(_WIN32)
@@ -152,6 +217,13 @@ class Pool {
         }
 
         void arriveAndWait() {
+#ifdef ENGINE_SIM_PROFILE
+            const int slot = slotIndex();
+            WaitRecorder recorder(
+                (slot >= 0 && slot < static_cast<int>(m_waitSlots.size()))
+                    ? &m_waitSlots[static_cast<size_t>(slot)]
+                    : nullptr);
+#endif
             const int generation = m_generation.load(std::memory_order_acquire);
             if (m_arrived.fetch_add(1, std::memory_order_acq_rel) == m_threadCount - 1) {
                 m_arrived.store(0, std::memory_order_relaxed);
@@ -191,6 +263,9 @@ class Pool {
         }
 
         void workerLoop(int threadIndex) {
+#ifdef ENGINE_SIM_PROFILE
+            slotIndex() = threadIndex;
+#endif
             unsigned long long seen = 0;
             for (;;) {
                 int spins = 0;
@@ -210,12 +285,21 @@ class Pool {
                 }
                 seen = m_epoch.load(std::memory_order_acquire);
                 const int count = m_count;
-                const int lo = slice(threadIndex, count);
-                const int hi = slice(threadIndex + 1, count);
+                const bool pull = m_pull.load(std::memory_order_relaxed);
                 const void *context = m_context;
                 const Call call = m_call;
                 try {
-                    for (int i = lo; i < hi; ++i) call(context, i);
+                    if (pull) {
+                        for (;;) {
+                            const int i = m_next.fetch_add(1, std::memory_order_relaxed);
+                            if (i >= count) break;
+                            call(context, i);
+                        }
+                    } else {
+                        const int lo = slice(threadIndex, count);
+                        const int hi = slice(threadIndex + 1, count);
+                        for (int i = lo; i < hi; ++i) call(context, i);
+                    }
                 } catch (...) {
                     captureException();
                 }
@@ -240,6 +324,8 @@ class Pool {
 
         std::atomic<unsigned long long> m_epoch{0};
         std::atomic<int> m_count{0};
+        std::atomic<int> m_next{0};
+        std::atomic<bool> m_pull{false};
         std::atomic<const void *> m_context{nullptr};
         Call m_call = nullptr;
 
@@ -254,9 +340,18 @@ class Pool {
         std::mutex m_barrierMutex;
         std::condition_variable m_barrierWake;
 
+#ifdef ENGINE_SIM_PROFILE
+        std::vector<WaitSlot> m_waitSlots;
+#endif
+
         std::mutex m_errorMutex;
         std::exception_ptr m_error;
 };
+
+// Split policy for a parallel region: Static gives each thread a fixed slice
+// (best when units are the same size); Pull lets threads take indices one by
+// one (best when a unit can dominate a static slice, e.g. port chains).
+enum class Split { Static, Pull };
 
 template <class F>
 inline void parallelFor(int count, const F &fn) {
@@ -265,7 +360,17 @@ inline void parallelFor(int count, const F &fn) {
         for (int i = 0; i < count; ++i) fn(i);
         return;
     }
-    pool.run(count, fn);
+    pool.run(count, false, fn);
+}
+
+template <class F>
+inline void parallelFor(int count, Split split, const F &fn) {
+    Pool &pool = Pool::instance();
+    if (pool.size() <= 1 || count <= 1) {
+        for (int i = 0; i < count; ++i) fn(i);
+        return;
+    }
+    pool.run(count, split == Split::Pull, fn);
 }
 
 } // namespace sim_pool

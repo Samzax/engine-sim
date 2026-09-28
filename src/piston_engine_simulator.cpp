@@ -337,14 +337,19 @@ void PistonEngineSimulator::simulateStep_() {
         if (im->getIgnitionEvent(i)) {
             m_engine->getChamber(i)->ignite();
         }
-
-        m_engine->getChamber(i)->update(timestep);
-        separatedPorts=separatedPorts && m_engine->getChamber(i)->supportsSeparatedPorts();
     }
 
-    for (int i = 0; i < cylinderCount; ++i) {
+    // Chambers write per-chamber state and read shared functions const-only,
+    // so updates and per-step flow resets run concurrently. Ignition stays
+    // serial above: it consumes rand() in cylinder order, and reordering those
+    // draws would change results.
+    sim_pool::parallelFor(cylinderCount,[&](int i) {
+        m_engine->getChamber(i)->update(timestep);
         m_engine->getChamber(i)->resetLastTimestepExhaustFlow();
         m_engine->getChamber(i)->resetLastTimestepIntakeFlow();
+    });
+    for (int i = 0; i < cylinderCount; ++i) {
+        separatedPorts=separatedPorts && m_engine->getChamber(i)->supportsSeparatedPorts();
     }
 
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
@@ -394,7 +399,7 @@ void PistonEngineSimulator::simulateStep_() {
                     if(reservoirsPending) {
                         reservoirsPending=false;
                         const int reservoirCount=exhaustSystemCount+intakeCount;
-                        sim_pool::parallelFor(reservoirCount+pipeCount,[&](int unit) {
+                        sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
                             if(unit<exhaustSystemCount) {
                                 m_engine->getExhaustSystem(unit)->process(fluidTimestep);
                             } else if(unit<reservoirCount) {
@@ -423,8 +428,9 @@ void PistonEngineSimulator::simulateStep_() {
                             // chains keep their cylinder order but touch
                             // opposite pipe ends from the cylinder stages,
                             // and the two chains are disjoint, so all units
-                            // commute when pipe cells >= 2.
-                            sim_pool::parallelFor(2+cylinderCount,[&](int unit) {
+                            // commute when pipe cells >= 2. Pull keeps the two
+                            // chains off one thread's static slice.
+                            sim_pool::parallelFor(2+cylinderCount,sim_pool::Split::Pull,[&](int unit) {
                                 if(unit<2) {
                                     for(int j=0;j<cylinderCount;++j) {
                                         if(unit==0) m_engine->getChamber(j)->flowIntakeReservoir(h);
@@ -468,8 +474,12 @@ void PistonEngineSimulator::simulateStep_() {
 
     // Runner aggregates feed audio/readouts once per mechanical step. Port
     // exchanges use the actual cells, so intermediate snapshots are redundant.
+    // Each chamber aggregates into its own two pipes and runner systems, so the
+    // per-chamber units are disjoint.
     if(!m_pipes.empty())
-        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->aggregatePipes();
+        sim_pool::parallelFor(cylinderCount,[&](int j) {
+            m_engine->getChamber(j)->aggregatePipes();
+        });
     im->resetIgnitionEvents();
 }
 
