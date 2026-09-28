@@ -47,6 +47,11 @@ class Pool {
 
         template <class F>
         void run(int count, bool pull, const F &fn) {
+            run(count, pull, nullptr, fn);
+        }
+
+        template <class F>
+        void run(int count, bool pull, const int *weights, const F &fn) {
             m_count = count;
             m_context = &fn;
             m_call = [](const void *context, int i) {
@@ -54,6 +59,7 @@ class Pool {
             };
             m_next.store(0, std::memory_order_relaxed);
             m_pull.store(pull, std::memory_order_relaxed);
+            m_weights.store(weights, std::memory_order_relaxed);
             m_epoch.fetch_add(1, std::memory_order_release);
             {
                 // Lock/unlock pairs the epoch store with parked workers so a
@@ -79,8 +85,8 @@ class Pool {
                         fn(i);
                     }
                 } else {
-                    const int lo = slice(0, count);
-                    const int hi = slice(1, count);
+                    const int lo = slice(0, count, weights);
+                    const int hi = slice(1, count, weights);
                     for (int i = lo; i < hi; ++i) fn(i);
                 }
             } catch (...) {
@@ -202,8 +208,23 @@ class Pool {
 #endif
         }
 
-        int slice(int edge, int count) const {
-            return static_cast<int>(static_cast<long long>(count) * edge / m_threadCount);
+        int slice(int edge, int count, const int *weights) const {
+            const long long uniform =
+                static_cast<long long>(count) * edge / m_threadCount;
+            if (!weights) return static_cast<int>(uniform);
+            if (edge <= 0) return 0;
+            if (edge >= m_threadCount) return count;
+            long long total = 0;
+            for (int i = 0; i < count; ++i) total += weights[i];
+            if (total <= 0) return static_cast<int>(uniform);
+            // Cut at the cumulative-weight quantile so every thread gets the
+            // same total cell count (unit granularity aside). Whole units stay
+            // intact, so the work and its order are unchanged.
+            const long long target = total * edge / m_threadCount;
+            long long cum = 0;
+            int i = 0;
+            while (i < count && cum < target) { cum += weights[i]; ++i; }
+            return i;
         }
 
         static void pause(int iterations) {
@@ -286,6 +307,7 @@ class Pool {
                 seen = m_epoch.load(std::memory_order_acquire);
                 const int count = m_count;
                 const bool pull = m_pull.load(std::memory_order_relaxed);
+                const int *weights = m_weights.load(std::memory_order_relaxed);
                 const void *context = m_context;
                 const Call call = m_call;
                 try {
@@ -296,8 +318,8 @@ class Pool {
                             call(context, i);
                         }
                     } else {
-                        const int lo = slice(threadIndex, count);
-                        const int hi = slice(threadIndex + 1, count);
+                        const int lo = slice(threadIndex, count, weights);
+                        const int hi = slice(threadIndex + 1, count, weights);
                         for (int i = lo; i < hi; ++i) call(context, i);
                     }
                 } catch (...) {
@@ -326,6 +348,7 @@ class Pool {
         std::atomic<int> m_count{0};
         std::atomic<int> m_next{0};
         std::atomic<bool> m_pull{false};
+        std::atomic<const int *> m_weights{nullptr};
         std::atomic<const void *> m_context{nullptr};
         Call m_call = nullptr;
 
@@ -371,6 +394,19 @@ inline void parallelFor(int count, Split split, const F &fn) {
         return;
     }
     pool.run(count, split == Split::Pull, fn);
+}
+
+// Weighted static split: weights[i] is the unit's work proxy (e.g. cell
+// count). Slices are cut at cumulative-weight quantiles so threads get equal
+// total weight; units stay whole, so results are identical to any other split.
+template <class F>
+inline void parallelFor(int count, const int *weights, const F &fn) {
+    Pool &pool = Pool::instance();
+    if (pool.size() <= 1 || count <= 1) {
+        for (int i = 0; i < count; ++i) fn(i);
+        return;
+    }
+    pool.run(count, false, weights, fn);
 }
 
 } // namespace sim_pool

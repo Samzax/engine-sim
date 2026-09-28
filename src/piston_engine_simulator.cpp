@@ -59,6 +59,9 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
             if(chamber->exhaustPipe()->active()) m_pipes.push_back(chamber->exhaustPipe());
         }
     }
+    m_pipeWeights.clear();
+    m_pipeWeights.reserve(m_pipes.size());
+    for (GasPipe *pipe : m_pipes) m_pipeWeights.push_back(pipe->count());
     // Reservoir chains and cylinder port stages may share one barrier when
     // every pipe has at least two cells: chains then touch the opposite pipe
     // end from the cylinder stages (single-cell pipes would alias them).
@@ -412,7 +415,7 @@ void PistonEngineSimulator::simulateStep_() {
                             }
                         });
                     } else {
-                        sim_pool::parallelFor(pipeCount,[&](int j) {
+                        sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
                             m_cflScratch[j]=m_pipes[j]->stableTimestep();
                         });
                     }
@@ -461,9 +464,10 @@ void PistonEngineSimulator::simulateStep_() {
                     GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
                 } else {
                     // Pipe interiors are independent (one owns its cells), so
-                    // the serial batch becomes one index per pipe.
+                    // the serial batch becomes one index per pipe; cell counts
+                    // weight the static slices (pipes differ ~2x in size).
                     ENGINE_SIM_PROFILE_SCOPE(Pipes);
-                    sim_pool::parallelFor(static_cast<int>(m_pipes.size()),[&](int j) {
+                    sim_pool::parallelFor(static_cast<int>(m_pipes.size()),m_pipeWeights.data(),[&](int j) {
                         m_pipes[j]->advance(h);
                     });
                 }
