@@ -89,7 +89,6 @@ public:
         int steps=0;
         while (dt>0) {
             if (++steps>10000) throw std::runtime_error("Pipe timestep requires excessive substeps; increase simulation frequency");
-            const double h=(std::min)(dt,stableTimestep());
             const int n=count();
             // One pass of the state-derived scalars: the interface loop used to
             // evaluate velocity/pressure/sound-speed about three times per cell.
@@ -97,6 +96,19 @@ public:
                 m_v[i]=m_cells[i].velocity_x();
                 m_p[i]=m_cells[i].pressure();
                 m_s[i]=(std::abs)(m_v[i])+m_cells[i].c();
+            }
+            // The CFL speed is max(1, |v|+c) over the same cells this pass just
+            // sampled (no state changes between here and stableTimestep()'s
+            // loop), so it is derived from m_s instead of evaluating velocity
+            // and sound speed a second time. The validated-cache path keeps
+            // stableTimestep()'s exact semantics (coupled GPU imports).
+            double h;
+            if (!m_cachedCflValid) {
+                double speed=1;
+                for (int i=0;i<n;++i) speed=(std::max)(speed,m_s[i]);
+                h=(std::min)(dt,0.25*m_dx/speed);
+            } else {
+                h=(std::min)(dt,stableTimestep());
             }
             for (int i=0;i<n;++i) m_states[i]=conserved(m_cells[i]);
             m_fluxes[0]={}; m_fluxes[n]={};
