@@ -82,12 +82,48 @@ run and barrier cost dominates everything else. Two lessons:
    pure loss - pulling 24 indices through one atomic per V12 substep cost more
    than the skew it could ever save - so they keep static slices. The default
    is `Static`; call sites opt into `Pull` per region shape.
+4. **Measure the imbalance before weighting the slices.** Static pipe and CFL
+   slices now split at cumulative *cell-count* quantiles (`parallelFor(count,
+   weights, fn)`), which is the right general shape for mixed pipe lengths.
+   Measured on both benchmark engines it is a mathematical no-op: every pipe
+   has exactly 8 cells (probe: hayabusa `8x8`, v12 `24x8`), so the weighted
+   cut lands on the same boundaries as the uniform cut, and an interleaved
+   step2-vs-step3 A/B (6 pairs per engine) showed no difference beyond the
+   machine's +-5% noise. The remaining barrier wait is not slice skew - it is
+   the serial port chain (wall floor) plus the per-region fixed cost
+   (~0.1-0.2 s of the profile's 0.13-0.16 barrier wall at most); fusing the
+   three fluid regions would save that fixed cost but breaks the per-region
+   profile buckets for an estimated 1-2%, so it was left alone.
 
 With profiling enabled (`ENGINE_SIM_PROFILE=ON`), the pool prints a barrier
 account at exit, e.g. `[sim] barrier: 1052480 calls, wall 0.155362s, ...` -
 `wall` is the estimated time the whole team spent waiting at barriers
 (sum of per-thread times / threads), which is the first number to watch when
 tuning region structure.
+
+## AVX2 vectorization (`ENGINE_SIM_AVX2`)
+
+The base fluid work (not just the overhead) was vectorized in two steps, both
+opt-in via `ENGINE_SIM_AVX2=ON` (applies `/arch:AVX2` to the five CPU targets;
+`engine-sim-cuda` is deliberately not flagged):
+
+* `GasPipe::advance`: the conserved-state precomputes (velocity, pressure,
+  `|v|+c`), the interface/flux combine and the cell update run 2-4 doubles at
+  a time in ymm registers.
+* `GasSystem::refreshProperties`: the NASA7 coefficient blend vectorizes over
+  species; hoists in `flow`/`flowCylinderPorts`/`flowStep` trim redundant
+  per-call work.
+
+Exactness rules (why results stay identical): code is gated on
+`__AVX2__` with `#else` fallbacks that are the original scalar code
+byte-for-byte; elementwise operation order matches the scalar path exactly;
+no FMA (verified via `dumpbin`: `vfmadd` count = 0); no reassociation of
+divides or sums - `aggregate` and every reduction fold stay scalar.
+
+Measured with interleaved run-by-run A/B against the scalar reference binary
+(medians of pairs, t8): hayabusa 0.390-0.400 vs 0.410-0.442, v12 0.426-0.434
+vs 0.447-0.454, i.e. roughly -5% wall on both engines at t8 and -8% at t1.
+The third planned step (weighted slices, above) added nothing measurable.
 
 ## Verification
 
@@ -98,7 +134,8 @@ tuning region structure.
   on the same sample). The pre-change and post-change binaries were run
   side-by-side and their full metric lines match exactly. `rms`/`clipped`
   differ run-to-run even between two single-threaded runs (pre-existing audio
-  race) and are not used as an oracle.
+  race - seen on the reference binary itself, and again on the SIMD binary
+  before disappearing on re-run) and are not used as an oracle.
 * `engine-sim-test.exe` on the CPU build: 64/64 sim tests pass (58 ran, 6
   CUDA-gated skipped, 3 disabled diagnostics); the full ctest tree still fails
   only the piranha/CsvData/Optimization dependency suites (pre-existing, those
@@ -129,21 +166,26 @@ machine, not a serial-code win). The V12 (24 pipes, 12 cylinders) scales better
 than the Hayabusa (8 pipes, 4 cylinders); on the Hayabusa t4 already matches t8
 because the port chains are short and barrier cost grows with thread count.
 
-The threaded CPU path now runs at 1.57 simulated seconds per wall second on
-the Hayabusa (0.396 s for 0.253 s simulated) and, on this machine, beats the
-coupled-GPU path for the same case by a wide margin (17.7 s with
-`ENGINE_SIM_GPU=1 ENGINE_SIM_GPU_COUPLED=1`).
+The threaded CPU path runs at ~1.57 simulated seconds per wall second on the
+Hayabusa after the AVX2 steps (interleaved medians ~0.39-0.40 s for 0.253 s
+simulated; the threading-only number above was 1.57 in its own session) and,
+on this machine, beats the coupled-GPU path for the same case by a wide margin
+(17.7 s with `ENGINE_SIM_GPU=1 ENGINE_SIM_GPU_COUPLED=1`). Cross-session wall
+comparisons on this machine are meaningless; trust only the interleaved A/B
+numbers in the AVX2 section.
 
 ## What is left on the table
 
 * The single-plenum intake chain is an inherent serial chain inside the port
   region (all cylinders share one plenum), so the ports region barely shrinks
-  with thread count.
+  with thread count. It is now the wall floor of the fluid loop; splitting it
+  would require breaking the plenum dependency (not possible exactly).
 * The rigid-body solver and the audio/aggregate code outside `simulateStep_`
   are serial (~0.05-0.09 s per run) and were left alone.
-* Barrier cost is still ~0.13-0.16 s of wall (the profile build's barrier
-  account proves it); the remaining lever there is coarser region batching
-  across substeps, which changes phase semantics.
-* The cell loops themselves (`GasPipe::advance`, `stableTimestep`) are scalar;
-  vectorizing them is the only lever left that shrinks the base work rather
-  than the overhead, and would be needed to chase 1.0 s per simulated second.
+* `stableTimestep`'s Newton solve and the `GasSystem::flow` transaction are
+  still scalar - the only levers left that shrink base work rather than
+  overhead. `GasPipe::advance` is already vectorized. Chasing 1.0 s per
+  simulated second would need those (branchy, tolerance-sensitive), and the
+  plan's optimistic bucket arithmetic did not survive contact with the
+  measurements: the three planned steps delivered ~5-6% wall on top of the
+  threaded path, not the 30-50% the estimates suggested.
