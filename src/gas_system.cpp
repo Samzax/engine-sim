@@ -81,6 +81,10 @@ ES_GAS_NOINLINE_DEFINITION void GasSystem::refreshProperties() const {
 
 ES_GAS_DEFINITION double GasSystem::molarEnergy(double t) const {
     refreshProperties();
+    return molarEnergyFast(t);
+}
+
+ES_GAS_DEFINITION double GasSystem::molarEnergyFast(double t) const {
     if (t <= 200) return m_cv200*t;
     if (t <= 1000) return m_u200+gas_thermo::integral(m_lowCp,t)-m_lowIntegral200;
     if (t <= 6000) return m_u1000+gas_thermo::integral(m_highCp,t)-m_highIntegral1000;
@@ -89,6 +93,10 @@ ES_GAS_DEFINITION double GasSystem::molarEnergy(double t) const {
 
 ES_GAS_DEFINITION double GasSystem::molarCv(double t) const {
     refreshProperties();
+    return molarCvFast(t);
+}
+
+ES_GAS_DEFINITION double GasSystem::molarCvFast(double t) const {
     if (t <= 200) return m_cv200;
     if (t >= 6000) return m_cv6000;
     return gas_thermo::cvPolynomial(t<=1000 ? m_lowCp : m_highCp, t);
@@ -119,6 +127,9 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::temperature() const {
     const double target = (std::max)(0.0, kineticEnergy() / n());
     double lower = 0, upper = (std::max)(6000.0, target / constants::R);
     double t = std::clamp(m_cachedTemperature, lower, upper);
+    // The solve reads but never writes state, so the property rebuild happens
+    // once here instead of once per molarEnergy/molarCv call in the loop.
+    refreshProperties();
 #ifdef ENGINE_SIM_PROFILE
     ++simulation_profile::thermo().newtonCalls;
 #endif
@@ -126,10 +137,10 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::temperature() const {
 #ifdef ENGINE_SIM_PROFILE
         ++simulation_profile::thermo().newtonIters;
 #endif
-        const double residual = molarEnergy(t) - target;
+        const double residual = molarEnergyFast(t) - target;
         if (std::abs(residual) <= 1e-10 * (std::max)(1.0, target)) break;
         if (residual > 0) upper = t; else lower = t;
-        const double next = t - residual / molarCv(t);
+        const double next = t - residual / molarCvFast(t);
         t = next > lower && next < upper ? next : 0.5 * (lower + upper);
     }
     m_cachedEnergy = kineticEnergy(); m_cachedN = n(); m_cachedTemperature = t;

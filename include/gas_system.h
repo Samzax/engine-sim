@@ -140,6 +140,11 @@ class GasSystem {
         bool m_variableProperties = false;
         mutable double m_cachedEnergy = -1, m_cachedN = -1, m_cachedTemperature = 300;
         ES_GAS_FUNCTION void refreshProperties() const;
+        // Same evaluations as molarEnergy/molarCv without the refresh call:
+        // callers must refreshProperties() first (temperature() hoists it out
+        // of its solve loop, where nothing invalidates state).
+        ES_GAS_FUNCTION double molarEnergyFast(double temperature) const;
+        ES_GAS_FUNCTION double molarCvFast(double temperature) const;
         mutable bool m_propertiesValid = false, m_massPropertiesValid = false;
         // Choked-flow factors depend only on gamma, not pressure, volume or mass.
         mutable double m_flowGamma=-1, m_flowChokedLimit=0, m_flowChokedFactor=0;
