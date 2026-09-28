@@ -159,6 +159,8 @@ if (ENGINE_SIM_PROFILE)
     target_compile_definitions(engine-sim PUBLIC ENGINE_SIM_PROFILE)
 endif()
 
+option(ENGINE_SIM_AVX2 "Generate AVX2 code for the simulation core" OFF)
+
 if (ENGINE_SIM_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
@@ -410,4 +412,14 @@ if (PIRANHA_ENABLED)
     target_link_libraries(engine-sim-test engine-sim-script-interpreter)
 endif()
 gtest_discover_tests(engine-sim-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+# The gas headers are inline-heavy, so every target compiling them must agree
+# on __AVX2__ or the linker would fold mismatched GasPipe::advance bodies.
+if (ENGINE_SIM_AVX2 AND MSVC)
+    foreach(_avx2_target engine-sim engine-sim-script-interpreter engine-sim-headless engine-sim-app engine-sim-test)
+        if (TARGET ${_avx2_target})
+            target_compile_options(${_avx2_target} PRIVATE /arch:AVX2)
+        endif()
+    endforeach()
+endif()
 endif()

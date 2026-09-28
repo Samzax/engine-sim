@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cstring>
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 // First-order finite-volume 1D Euler pipe, with Rusanov interface fluxes.
 // Ports exchange gas with existing calibrated orifices; the distributed interior
@@ -28,6 +31,7 @@ public:
         m_cells.assign(count,prototype);
         m_fluxes.resize(count+1);
         m_states.resize(count);
+        m_v.resize(count); m_p.resize(count); m_s.resize(count);
         for (auto &cell:m_cells) {
             cell.m_state.V/=count; cell.m_state.n_mol/=count;
             cell.m_state.E_k/=count;
@@ -81,28 +85,49 @@ public:
 
     void advance(double dt) {
         if (!active()) return;
+        const double diameter=2*std::sqrt(m_area/constants::pi);
         int steps=0;
         while (dt>0) {
             if (++steps>10000) throw std::runtime_error("Pipe timestep requires excessive substeps; increase simulation frequency");
             const double h=(std::min)(dt,stableTimestep());
             const int n=count();
+            // One pass of the state-derived scalars: the interface loop used to
+            // evaluate velocity/pressure/sound-speed about three times per cell.
+            for (int i=0;i<n;++i) {
+                m_v[i]=m_cells[i].velocity_x();
+                m_p[i]=m_cells[i].pressure();
+                m_s[i]=(std::abs)(m_v[i])+m_cells[i].c();
+            }
             for (int i=0;i<n;++i) m_states[i]=conserved(m_cells[i]);
             m_fluxes[0]={}; m_fluxes[n]={};
-            m_fluxes[0][5]=m_cells.front().pressure();
-            m_fluxes[n][5]=m_cells.back().pressure();
+            m_fluxes[0][5]=m_p[0];
+            m_fluxes[n][5]=m_p[n-1];
             for (int i=1;i<n;++i) {
-                const auto &left=m_cells[i-1]; const auto &right=m_cells[i];
-                const auto fl=flux(left,m_states[i-1]), fr=flux(right,m_states[i]);
-                const double a=(std::max)(std::abs(left.velocity_x())+left.c(), std::abs(right.velocity_x())+right.c());
-                for (int k=0;k<8;++k)
-                    m_fluxes[i][k]=0.5*(fl[k]+fr[k])-0.5*a*(m_states[i][k]-m_states[i-1][k]);
+                const double a=(std::max)(m_s[i-1],m_s[i]);
+                m_fluxes[i]=combineFlux(m_states[i-1],m_v[i-1],m_p[i-1],
+                    m_states[i],m_v[i],m_p[i],a);
             }
+#if defined(__AVX2__)
+            const __m256d hOverDx=_mm256_set1_pd(h/m_dx);
+#endif
             for (int i=0;i<n;++i) {
+#if defined(__AVX2__)
+                // Elementwise in k: the same sub/mul/sub chain the scalar loop
+                // runs, folded to one ymm pair (8 doubles = 2 lanes).
+                const __m256d s0=_mm256_loadu_pd(&m_states[i][0]);
+                const __m256d s1=_mm256_loadu_pd(&m_states[i][4]);
+                const __m256d d0=_mm256_sub_pd(_mm256_loadu_pd(&m_fluxes[i+1][0]),
+                    _mm256_loadu_pd(&m_fluxes[i][0]));
+                const __m256d d1=_mm256_sub_pd(_mm256_loadu_pd(&m_fluxes[i+1][4]),
+                    _mm256_loadu_pd(&m_fluxes[i][4]));
+                _mm256_storeu_pd(&m_states[i][0],_mm256_sub_pd(s0,_mm256_mul_pd(hOverDx,d0)));
+                _mm256_storeu_pd(&m_states[i][4],_mm256_sub_pd(s1,_mm256_mul_pd(hOverDx,d1)));
+#else
                 for (int k=0;k<8;++k) m_states[i][k]-=h/m_dx*(m_fluxes[i+1][k]-m_fluxes[i][k]);
+#endif
                 restore(m_cells[i],m_states[i]);
                 // Darcy wall friction; lost bulk energy remains as gas heat.
                 const double oldBulk=m_cells[i].bulkKineticEnergy();
-                const double diameter=2*std::sqrt(m_area/constants::pi);
                 m_cells[i].m_state.momentum[0]/=1+m_frictionFactor*std::abs(m_cells[i].velocity_x())*h/(2*diameter);
                 m_cells[i].changeEnergy(oldBulk-m_cells[i].bulkKineticEnergy());
             }
@@ -181,10 +206,32 @@ private:
     static Vector conserved(const GasSystem &g) {
         Vector u{}; GasTransport::conserved(g,u.data()); return u;
     }
-    static Vector flux(const GasSystem &g,const Vector &u) {
-        Vector f{}; const double v=g.velocity_x(), p=g.pressure();
-        for (int k=0;k<8;++k) f[k]=u[k]*v;
-        f[5]+=p; f[6]+=p*v;
+    // Rusanov interface flux: two advective fluxes (u*v with the pressure
+    // terms folded in exactly where flux() added them) plus the dissipative
+    // state difference. v/p come from the per-substep scalar precompute.
+    static Vector combineFlux(const Vector &uL, double vL, double pL,
+            const Vector &uR, double vR, double pR, double a) {
+        Vector fl{}, fr{}, f{};
+        for (int k=0;k<8;++k) { fl[k]=uL[k]*vL; fr[k]=uR[k]*vR; }
+        fl[5]+=pL; fl[6]+=pL*vL;
+        fr[5]+=pR; fr[6]+=pR*vR;
+#if defined(__AVX2__)
+        const __m256d half=_mm256_set1_pd(0.5);
+        const __m256d halfA=_mm256_set1_pd(0.5*a);
+        const __m256d sum=_mm256_mul_pd(_mm256_add_pd(
+            _mm256_loadu_pd(fl.data()),_mm256_loadu_pd(fr.data())),half);
+        const __m256d sum4=_mm256_mul_pd(_mm256_add_pd(
+            _mm256_loadu_pd(fl.data()+4),_mm256_loadu_pd(fr.data()+4)),half);
+        const __m256d diff=_mm256_mul_pd(halfA,_mm256_sub_pd(
+            _mm256_loadu_pd(uR.data()),_mm256_loadu_pd(uL.data())));
+        const __m256d diff4=_mm256_mul_pd(halfA,_mm256_sub_pd(
+            _mm256_loadu_pd(uR.data()+4),_mm256_loadu_pd(uL.data()+4)));
+        _mm256_storeu_pd(f.data(),_mm256_sub_pd(sum,diff));
+        _mm256_storeu_pd(f.data()+4,_mm256_sub_pd(sum4,diff4));
+#else
+        for (int k=0;k<8;++k)
+            f[k]=0.5*(fl[k]+fr[k])-0.5*a*(uR[k]-uL[k]);
+#endif
         return f;
     }
     static void restore(GasSystem &g,const Vector &u) {
@@ -195,6 +242,7 @@ private:
     mutable bool m_cachedCflValid=false;
     double m_cachedCflStep=0;
     std::vector<Vector> m_fluxes,m_states;
+    std::vector<double> m_v,m_p,m_s;
     double m_area=1,m_dx=1,m_frictionFactor=0.02;
 };
 #endif
