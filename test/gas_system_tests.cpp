@@ -1,3 +1,4 @@
+#include "../include/reservoir_flow.h"
 #include "../include/gpu_chamber.h"
 #include <gtest/gtest.h>
 
@@ -1264,4 +1265,70 @@ TEST(GasSystemTests, CudaCylinderStagesMatchCpuHeatAndCombustion) {
         }
     }
     EXPECT_TRUE(sawBurn); EXPECT_TRUE(sawExtinction);
+}
+
+TEST(GasSystemTests, AtmosphereTemplatesPreserveResetStateAndInvalidate) {
+    GasSystem atmosphere;
+    atmosphere.initialize(101325,1000,298.15);
+    atmosphere.setGeometry(100,100,1,0);
+    reservoir_flow::IntakeParameters p{12.5,.114232,12.5,.5,.001,.01,.001,.5};
+    reservoir_flow::IntakeTemplates intake;
+    reservoir_flow::ExhaustTemplate exhaust;
+    for(bool advanced : {false,true,false}) {
+        atmosphere.setVariableProperties(advanced);
+        for(double volume : {1000.,2000.}) {
+            atmosphere.initialize(101325,volume,298.15);
+            for(double fuelMass : {.114232,.044}) {
+                p.fuelMass=fuelMass; p.oxygenPerFuel=fuelMass<.1?3:12.5;
+                p.molecularAfr=p.oxygenPerFuel;
+                reservoir_flow::prepare(intake,atmosphere,advanced,p);
+                reservoir_flow::prepare(exhaust,atmosphere,advanced);
+                const double afr=advanced?p.molecularAfr/.21:.8*p.molecularAfr*4;
+                EXPECT_NEAR(intake.main.mix().p_fuel,1/(1+afr),1e-15);
+                EXPECT_NEAR(intake.idle.mix().p_fuel,1.0/3,1e-15);
+                EXPECT_EQ(intake.main.mix().fuelMolecularMass,fuelMass);
+                EXPECT_EQ(intake.idle.mix().oxygenPerFuel,p.oxygenPerFuel);
+                EXPECT_EQ(exhaust.gas.mix().p_o2,advanced?.21:0);
+                for(const auto *gas : {&intake.main,&intake.idle,&exhaust.gas}) {
+                    EXPECT_EQ(gas->variableProperties(),advanced);
+                    EXPECT_EQ(gas->volume(),volume);
+                    EXPECT_NEAR(gas->n(),101325*volume/(constants::R*298.15),1e-10);
+                    EXPECT_NEAR(gas->pressure(),101325,1e-5);
+                    EXPECT_NEAR(gas->temperature(),298.15,1e-7);
+                    EXPECT_EQ(gas->velocity_x(),0);
+                }
+                // A used atmosphere may receive hot products; the next reset must
+                // recover the imposed environment, without contaminating templates.
+                atmosphere=intake.main;
+                atmosphere.gainN(10,100000,{0,.9,.1,.1,.1});
+                atmosphere.changeEnergy(10000);
+                const auto before=intake.main;
+                reservoir_flow::prepare(intake,atmosphere,advanced,p);
+                EXPECT_EQ(intake.main.n(),before.n());
+                EXPECT_EQ(intake.main.totalEnergy(),before.totalEnergy());
+                EXPECT_EQ(intake.main.mix().p_co2,0);
+            }
+        }
+    }
+}
+
+TEST(GasSystemTests, ChokedFlowCacheTracksCurrentGamma) {
+    GasSystem source,sink;
+    source.setVariableProperties(true); sink.setVariableProperties(true);
+    source.initialize(4e5,.001,900,{.015,.795,.19});
+    source.primeFlowConstants();
+    for(double temperature : {300.,900.,1800.,300.}) for(bool products : {false,true}) {
+        GasSystem::Mix mix{.015,.795,.19};
+        if(products) {mix.p_co2=.2; mix.p_h2o=.3;}
+        source.initialize(4e5,.001,temperature,mix);
+        sink.initialize(1e5,.002,300,{0,.79,.21});
+        const double gamma=source.heatCapacityRatio();
+        const double k=GasSystem::k_28inH2O(40),dt=1e-9;
+        const double expected=dt*GasSystem::flowRate(k,source.pressure(),sink.pressure(),
+            source.temperature(),sink.temperature(),gamma,std::pow(2/(gamma+1),gamma/(gamma-1)),
+            std::sqrt(gamma)*std::pow(2/(gamma+1),(gamma+1)/(2*(gamma-1))))
+            *std::sqrt(units::AirMolecularMass/GasSystem::molecularMass(mix));
+        GasSystem::FlowParameters p{k,dt,1,0,0,0,&source,&sink};
+        EXPECT_NEAR(GasSystem::flow(p),expected,1e-14);
+    }
 }

@@ -2,6 +2,8 @@
 #include "../include/simulator.h"
 #include "../include/wave_reader.h"
 #include "../include/gpu_pipe.h"
+#include "../include/gpu_coupled.h"
+#include "../include/piston_engine_simulator.h"
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -201,6 +203,11 @@ int main(int argc, char **argv) {
             << ", clipped=" << clipped << ", wall_temperature_K=" << wallTemperature
             << ", coolant_energy_J=" << coolantEnergy << ", oil_temperature_K=" << oilTemperature
             << ", piston_friction_energy_J=" << frictionEnergy << '\n';
+        if(gpu_coupled::requested()) {
+            const auto *piston=dynamic_cast<const PistonEngineSimulator *>(simulator.get());
+            if(piston) std::cout << "Coupled GPU steps=" << piston->coupledGpuSteps()
+                << ", fallback steps=" << piston->coupledGpuFallbacks() << '\n';
+        }
         return samples ? 0 : 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

@@ -10,6 +10,7 @@
 
 class GasSystem {
     friend class GasPipe;
+    friend struct GasTransport;
     public:
         struct Mix {
             double p_fuel = 0.0;
@@ -50,6 +51,7 @@ class GasSystem {
         ES_GAS_FUNCTION void setVariableProperties(bool enabled);
         ES_GAS_FUNCTION bool variableProperties() const { return m_variableProperties; }
         ES_GAS_FUNCTION static double molecularMass(const Mix &mix);
+        ES_GAS_FUNCTION void primeFlowConstants() const;
         ES_GAS_FUNCTION static double mixtureEnergy(double temperature, const Mix &mix);
         ES_GAS_FUNCTION static double mixtureCv(double temperature, const Mix &mix);
         ES_GAS_FUNCTION double energyAtTemperature(double temperature) const;
@@ -139,6 +141,9 @@ class GasSystem {
         mutable double m_cachedEnergy = -1, m_cachedN = -1, m_cachedTemperature = 300;
         ES_GAS_FUNCTION void refreshProperties() const;
         mutable bool m_propertiesValid = false, m_massPropertiesValid = false;
+        // Choked-flow factors depend only on gamma, not pressure, volume or mass.
+        mutable double m_flowGamma=-1, m_flowChokedLimit=0, m_flowChokedFactor=0;
+        ES_GAS_FUNCTION void refreshFlowConstants(double gamma) const;
         ES_GAS_FUNCTION void invalidateProperties() const { m_propertiesValid=false; m_massPropertiesValid=false; }
         ES_GAS_FUNCTION void refreshMass() const {
             if (!m_massPropertiesValid) {
@@ -147,6 +152,8 @@ class GasSystem {
             }
         }
         mutable double m_lowCp[5]{}, m_highCp[5]{};
+        // Fixed integration anchors are shared by every temperature inversion.
+        mutable double m_lowIntegral200 = 0, m_highIntegral1000 = 0;
         mutable double m_u200 = 0, m_u1000 = 0, m_u6000 = 0;
         mutable double m_cv200 = 0, m_cv6000 = 0, m_molarMass = 0;
 };

@@ -7,6 +7,17 @@
 #include <cmath>
 #include <cassert>
 
+ES_GAS_DEFINITION void GasSystem::refreshFlowConstants(double gamma) const {
+    if(m_flowGamma==gamma) return;
+    m_flowChokedLimit=std::pow(2/(gamma+1),gamma/(gamma-1));
+    m_flowChokedFactor=std::sqrt(gamma)*std::pow(2/(gamma+1),(gamma+1)/(2*(gamma-1)));
+    m_flowGamma=gamma;
+}
+
+ES_GAS_DEFINITION void GasSystem::primeFlowConstants() const {
+    if(m_variableProperties) refreshFlowConstants(heatCapacityRatio());
+}
+
 ES_GAS_DEFINITION double GasSystem::molecularMass(const Mix &m) {
     return (m.p_inert - m.p_co2 - m.p_h2o) * 0.028014 + m.p_o2 * 0.0319988
         + m.p_co2 * 0.0440098 + m.p_h2o * 0.0180154 + m.p_fuel * m.fuelMolecularMass;
@@ -22,7 +33,7 @@ ES_GAS_DEFINITION double GasSystem::mixtureCv(double t, const Mix &m) {
         + m.p_co2*gas_thermo::cv(2,t) + m.p_h2o*gas_thermo::cv(3,t) + m.p_fuel*gas_thermo::cv(4,t);
 }
 
-ES_GAS_DEFINITION void GasSystem::refreshProperties() const {
+ES_GAS_NOINLINE_DEFINITION void GasSystem::refreshProperties() const {
     if (m_propertiesValid) return;
     const Mix &m = m_state.mix;
     const double weights[5] = {m.p_inert-m.p_co2-m.p_h2o, m.p_o2, m.p_co2, m.p_h2o, m.p_fuel};
@@ -36,8 +47,10 @@ ES_GAS_DEFINITION void GasSystem::refreshProperties() const {
     m_cv200 = gas_thermo::cvPolynomial(m_lowCp, 200);
     m_cv6000 = gas_thermo::cvPolynomial(m_highCp, 6000);
     m_u200 = 200*m_cv200;
-    m_u1000 = m_u200 + gas_thermo::integral(m_lowCp,1000)-gas_thermo::integral(m_lowCp,200);
-    m_u6000 = m_u1000 + gas_thermo::integral(m_highCp,6000)-gas_thermo::integral(m_highCp,1000);
+    m_lowIntegral200 = gas_thermo::integral(m_lowCp,200);
+    m_highIntegral1000 = gas_thermo::integral(m_highCp,1000);
+    m_u1000 = m_u200 + gas_thermo::integral(m_lowCp,1000)-m_lowIntegral200;
+    m_u6000 = m_u1000 + gas_thermo::integral(m_highCp,6000)-m_highIntegral1000;
     refreshMass();
     m_propertiesValid = true;
 }
@@ -45,8 +58,8 @@ ES_GAS_DEFINITION void GasSystem::refreshProperties() const {
 ES_GAS_DEFINITION double GasSystem::molarEnergy(double t) const {
     refreshProperties();
     if (t <= 200) return m_cv200*t;
-    if (t <= 1000) return m_u200+gas_thermo::integral(m_lowCp,t)-gas_thermo::integral(m_lowCp,200);
-    if (t <= 6000) return m_u1000+gas_thermo::integral(m_highCp,t)-gas_thermo::integral(m_highCp,1000);
+    if (t <= 1000) return m_u200+gas_thermo::integral(m_lowCp,t)-m_lowIntegral200;
+    if (t <= 6000) return m_u1000+gas_thermo::integral(m_highCp,t)-m_highIntegral1000;
     return m_u6000 + m_cv6000*(t-6000);
 }
 
@@ -75,7 +88,7 @@ ES_GAS_DEFINITION void GasSystem::setVariableProperties(bool enabled) {
     m_cachedEnergy = -1;
 }
 
-ES_GAS_DEFINITION double GasSystem::temperature() const {
+ES_GAS_NOINLINE_DEFINITION double GasSystem::temperature() const {
     if (n() <= 0) return 0;
     if (!m_variableProperties) return kineticEnergy() / heatCapacity(300);
     if (m_cachedEnergy == kineticEnergy() && m_cachedN == n()) return m_cachedTemperature;
@@ -510,7 +523,7 @@ ES_GAS_DEFINITION void GasSystem::dissipateVelocity(double dt, double timeConsta
     m_state.E_k += dE_k;
 }
 
-ES_GAS_DEFINITION double GasSystem::flow(const FlowParameters &params) {
+ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(const FlowParameters &params) {
     // A closed port cannot exchange mass or momentum. Keep the existing path
     // for temporarily negative sensible energy, which applies the energy floor.
     if (params.k_flow == 0 && params.system_0->kineticEnergy() >= 0
@@ -553,6 +566,7 @@ ES_GAS_DEFINITION double GasSystem::flow(const FlowParameters &params) {
 
     if (params.dt <= 0 || source->n() <= 0) return 0;
     const double gamma = source->heatCapacityRatio();
+    if(source->m_variableProperties) source->refreshFlowConstants(gamma);
     double flow = params.dt * flowRate(
         params.k_flow,
         sourcePressure,
@@ -560,8 +574,8 @@ ES_GAS_DEFINITION double GasSystem::flow(const FlowParameters &params) {
         source->temperature(),
         sink->temperature(),
         gamma,
-        source->m_variableProperties ? std::pow(2/(gamma+1), gamma/(gamma-1)) : source->m_chokedFlowLimit,
-        source->m_variableProperties ? std::sqrt(gamma)*std::pow(2/(gamma+1), (gamma+1)/(2*(gamma-1))) : source->m_chokedFlowFactorCached);
+        source->m_variableProperties ? source->m_flowChokedLimit : source->m_chokedFlowLimit,
+        source->m_variableProperties ? source->m_flowChokedFactor : source->m_chokedFlowFactorCached);
     if (source->m_variableProperties)
         flow *= std::sqrt(units::AirMolecularMass / molecularMass(source->mix()));
     flow = clamp(flow, 0.0, 0.9 * source->n());
@@ -684,14 +698,14 @@ ES_GAS_DEFINITION double GasSystem::flow(const FlowParameters &params) {
     return flow * direction;
 }
 
-ES_GAS_DEFINITION double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix) {
+ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix) {
     if (m_variableProperties) {
         if (dt <= 0 || k_flow == 0) return 0;
         const bool outgoing = pressure() > P_env;
         const double gamma = outgoing ? heatCapacityRatio() : 1 + constants::R / mixtureCv(T_env, mix);
+        refreshFlowConstants(gamma);
         double amount = dt * flowRate(k_flow, pressure(), P_env, temperature(), T_env, gamma,
-            std::pow(2/(gamma+1), gamma/(gamma-1)),
-            std::sqrt(gamma)*std::pow(2/(gamma+1), (gamma+1)/(2*(gamma-1))));
+            m_flowChokedLimit,m_flowChokedFactor);
         amount *= std::sqrt(units::AirMolecularMass / molecularMass(outgoing ? m_state.mix : mix));
         if (outgoing) amount = (std::min)(amount, 0.9*n());
         const double donorEnergy = outgoing ? (n() > 0 ? kineticEnergyPerMol() : 0) : mixtureEnergy(T_env, mix);

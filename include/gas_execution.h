@@ -9,9 +9,11 @@
 #ifdef __CUDACC__
 #define ES_GAS_FUNCTION __device__
 #define ES_GAS_DEFINITION __device__ inline
+#define ES_GAS_NOINLINE_DEFINITION __device__ __noinline__ inline
 #else
 #define ES_GAS_FUNCTION
 #define ES_GAS_DEFINITION
+#define ES_GAS_NOINLINE_DEFINITION
 #endif
 
 #endif

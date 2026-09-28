@@ -4,6 +4,7 @@
 #include "part.h"
 
 #include "gas_system.h"
+#include "reservoir_flow.h"
 #include "impulse_response.h"
 
 class ExhaustSystem : public Part {
@@ -29,7 +30,11 @@ class ExhaustSystem : public Part {
         virtual void destroy();
 
         void process(double dt);
+        reservoir_flow::ExhaustParameters flowParameters() const;
+        reservoir_flow::ExhaustState flowState() const;
+        void applyFlowState(const reservoir_flow::ExhaustState &state);
         void configureGas(bool enabled) {
+            m_templates.valid=false;
             m_system.setVariableProperties(enabled);
             m_atmosphere.setVariableProperties(enabled);
             if (enabled) m_system.reset(m_system.pressure(),m_system.temperature(),{0,0.79,0.21});
@@ -49,6 +54,7 @@ class ExhaustSystem : public Part {
 
     protected:
         GasSystem m_atmosphere;
+        mutable reservoir_flow::ExhaustTemplate m_templates;
         GasSystem m_system;
 
         ImpulseResponse *m_impulseResponse;

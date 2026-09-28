@@ -32,6 +32,9 @@ class PistonEngineSimulator : public Simulator {
 
         void setFluidSimulationSteps(int steps) { m_fluidSimulationSteps = steps; }
         int getFluidSimulationSteps() const { return m_fluidSimulationSteps; }
+        bool advanceCoupledFluids(double timestep);
+        unsigned long long coupledGpuSteps() const { return m_coupledGpuSteps; }
+        unsigned long long coupledGpuFallbacks() const { return m_coupledGpuFallbacks; }
         int getFluidSimulationFrequency() const { return m_fluidSimulationSteps * getSimulationFrequency(); }
 
         virtual double getAverageOutputSignal() const override;
@@ -70,6 +73,7 @@ class PistonEngineSimulator : public Simulator {
 
         int m_fluidSimulationSteps;
         std::vector<GasPipe *> m_pipes;
+        unsigned long long m_coupledGpuSteps=0,m_coupledGpuFallbacks=0;
 };
 
 #endif /* ATG_ENGINE_SIM_PISTON_ENGINE_SIMULATOR_H */

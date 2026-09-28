@@ -23,6 +23,7 @@ Intake::~Intake() {
 }
 
 void Intake::initialize(Parameters &params) {
+    m_templates.valid=false;
     const double length = params.volume / params.CrossSectionArea;
     if (!std::isfinite(params.volume) || params.volume <= 0
         || !std::isfinite(params.CrossSectionArea) || params.CrossSectionArea <= 0
@@ -64,57 +65,18 @@ void Intake::destroy() {
     /* void */
 }
 
+reservoir_flow::IntakeParameters Intake::flowParameters() const {
+    return {m_molecularAfr,m_fuelMass,m_oxygenPerFuel,getThrottlePlatePosition(),
+        m_crossSectionArea,m_inputFlowK,m_idleFlowK,m_velocityDecay};
+}
+reservoir_flow::IntakeState Intake::flowState() const {
+    reservoir_flow::prepare(m_templates,m_atmosphere,m_system.variableProperties(),flowParameters());
+    return {m_system,m_atmosphere,m_flow,m_totalFuelInjected,m_flowRate,m_templates};
+}
+void Intake::applyFlowState(const reservoir_flow::IntakeState &s) {
+    m_system=s.system; m_atmosphere=s.atmosphere; m_flow=s.flow;
+    m_totalFuelInjected=s.totalFuelInjected; m_flowRate=s.flowRate; m_templates=s.templates;
+}
 void Intake::process(double dt) {
-    const double oxygenFraction = m_system.variableProperties() ? 0.21 : 0.25;
-    const double ideal_afr = m_system.variableProperties() ? m_molecularAfr / oxygenFraction : 0.8 * m_molecularAfr * 4;
-
-    const double p_air = ideal_afr / (1 + ideal_afr);
-    GasSystem::Mix fuelAirMix;
-    fuelAirMix.fuelMolecularMass = m_fuelMass;
-    fuelAirMix.oxygenPerFuel = m_oxygenPerFuel;
-    fuelAirMix.p_fuel = 1 - p_air;
-    fuelAirMix.p_inert = p_air * (1-oxygenFraction);
-    fuelAirMix.p_o2 = p_air * oxygenFraction;
-
-    const double idle_afr = 2.0;
-    const double p_idle_air = idle_afr / (1 + idle_afr);
-    GasSystem::Mix fuelMix;
-    fuelMix.fuelMolecularMass = m_fuelMass;
-    fuelMix.oxygenPerFuel = m_oxygenPerFuel;
-    fuelMix.p_fuel = (1.0 - p_idle_air);
-    fuelMix.p_inert = p_idle_air * (1-oxygenFraction);
-    fuelMix.p_o2 = p_idle_air * oxygenFraction;
-
-    const double throttle = getThrottlePlatePosition();
-    const double flowAttenuation = std::cos(throttle * constants::pi / 2);
-
-    GasSystem::FlowParameters flowParams;
-    flowParams.crossSectionArea_0 = units::area(10, units::m2);
-    flowParams.crossSectionArea_1 = m_crossSectionArea;
-    flowParams.direction_x = 0.0;
-    flowParams.direction_y = -1.0;
-    flowParams.dt = dt;
-
-    m_atmosphere.reset(units::pressure(1.0, units::atm), units::celcius(25.0), fuelAirMix);
-    flowParams.system_0 = &m_atmosphere;
-    flowParams.system_1 = &m_system;
-    flowParams.k_flow = flowAttenuation * m_inputFlowK;
-    m_flow = m_system.flow(flowParams);
-
-    m_atmosphere.reset(units::pressure(1.0, units::atm), units::celcius(25.0), fuelMix);
-    flowParams.system_0 = &m_atmosphere;
-    flowParams.system_1 = &m_system;
-    flowParams.k_flow = m_idleFlowK;
-    const double idleCircuitFlow = m_system.flow(flowParams);
-
-    m_system.dissipateExcessVelocity();
-    m_system.updateVelocity(dt, m_velocityDecay);
-
-    if (m_flow > 0) {
-        m_totalFuelInjected += fuelAirMix.p_fuel * m_flow;
-    }
-
-    if (idleCircuitFlow > 0) {
-        m_totalFuelInjected += fuelMix.p_fuel * idleCircuitFlow;
-    }
+    reservoir_flow::process({m_system,m_atmosphere,m_flow,m_totalFuelInjected,m_templates},flowParameters(),dt);
 }

@@ -23,6 +23,7 @@ ExhaustSystem::~ExhaustSystem() {
 }
 
 void ExhaustSystem::initialize(const Parameters &params) {
+    m_templates.valid=false;
     const double volume = params.collectorCrossSectionArea * params.length;
     if (!std::isfinite(params.length) || params.length <= 0
         || !std::isfinite(params.collectorCrossSectionArea) || params.collectorCrossSectionArea <= 0
@@ -65,29 +66,16 @@ void ExhaustSystem::destroy() {
     /* void */
 }
 
+reservoir_flow::ExhaustParameters ExhaustSystem::flowParameters() const {
+    return {m_collectorCrossSectionArea,m_outletFlowRate,m_velocityDecay};
+}
+reservoir_flow::ExhaustState ExhaustSystem::flowState() const {
+    reservoir_flow::prepare(m_templates,m_atmosphere,m_system.variableProperties());
+    return {m_system,m_atmosphere,m_flow,m_templates};
+}
+void ExhaustSystem::applyFlowState(const reservoir_flow::ExhaustState &s) {
+    m_system=s.system; m_atmosphere=s.atmosphere; m_flow=s.flow; m_templates=s.templates;
+}
 void ExhaustSystem::process(double dt) {
-    GasSystem::Mix airMix;
-    airMix.p_fuel = 0;
-    airMix.p_inert = 1.0;
-    airMix.p_o2 = 0.0;
-    if (m_system.variableProperties()) {
-        airMix.p_inert = 0.79;
-        airMix.p_o2 = 0.21;
-    }
-
-    m_atmosphere.reset(units::pressure(1.0, units::atm), units::celcius(25.0), airMix);
-    GasSystem::FlowParameters flowParams;
-    flowParams.crossSectionArea_0 = m_collectorCrossSectionArea;
-    flowParams.crossSectionArea_1 = units::area(10, units::m2);
-    flowParams.direction_x = 1.0;
-    flowParams.direction_y = 0.0;
-    flowParams.dt = dt;
-    flowParams.system_0 = &m_atmosphere;
-    flowParams.system_1 = &m_system;
-    flowParams.k_flow = m_outletFlowRate;
-
-    m_flow = m_system.flow(flowParams);
-
-    m_system.dissipateExcessVelocity();
-    m_system.updateVelocity(dt, m_velocityDecay);
+    reservoir_flow::process({m_system,m_atmosphere,m_flow,m_templates},flowParameters(),dt);
 }

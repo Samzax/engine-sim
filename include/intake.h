@@ -4,6 +4,7 @@
 #include "part.h"
 
 #include "gas_system.h"
+#include "reservoir_flow.h"
 
 class Intake : public Part {
     public:
@@ -44,7 +45,11 @@ class Intake : public Part {
         virtual void destroy();
 
         void process(double dt);
+        reservoir_flow::IntakeParameters flowParameters() const;
+        reservoir_flow::IntakeState flowState() const;
+        void applyFlowState(const reservoir_flow::IntakeState &state);
         void configureGas(bool enabled, double fuelMass, double oxygenPerFuel) {
+            m_templates.valid=false;
             m_system.setVariableProperties(enabled);
             m_atmosphere.setVariableProperties(enabled);
             if (enabled) m_system.reset(m_system.pressure(),m_system.temperature(),{0,0.79,0.21});
@@ -76,6 +81,7 @@ class Intake : public Part {
         double m_velocityDecay;
 
         GasSystem m_atmosphere;
+        mutable reservoir_flow::IntakeTemplates m_templates;
         double m_fuelMass = 0.114232;
         double m_oxygenPerFuel = 12.5;
 };

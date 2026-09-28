@@ -70,6 +70,8 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         // pipe interiors. Distinct pipe endpoints make the stages independent.
         bool supportsSeparatedPorts() const { return m_intakePipe.active() && m_exhaustPipe.active(); }
         void flowReservoirPorts(double dt);
+        double manifoldCouplingK() const { return m_manifoldToRunnerFlowRate; }
+        double collectorCouplingK() const { return m_primaryToCollectorFlowRate; }
         void flowCylinderPorts(double dt);
         chamber_flow::Parameters cylinderFlowParameters() const;
         chamber_flow::State cylinderFlowState() const;

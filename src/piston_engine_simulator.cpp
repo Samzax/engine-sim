@@ -1,5 +1,6 @@
 #include "../include/piston_engine_simulator.h"
 #include "../include/simulation_profile.h"
+#include "../include/gpu_coupled.h"
 
 #include "../include/constants.h"
 #include "../include/units.h"
@@ -42,6 +43,7 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
     m_transmission = transmission;
 
     m_pipes.clear();
+    m_coupledGpuSteps=m_coupledGpuFallbacks=0;
     const bool variableGas = engine->variableGasProperties();
     for (int i = 0; i < engine->getIntakeCount(); ++i)
         engine->getIntake(i)->configureGas(variableGas, engine->getFuel()->getMolecularMass(), engine->getFuel()->getMolecularAfr());
@@ -335,7 +337,12 @@ void PistonEngineSimulator::simulateStep_() {
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     const int intakeCount = m_engine->getIntakeCount();
     const double fluidTimestep = timestep / m_fluidSimulationSteps;
-    for (int i = 0; i < m_fluidSimulationSteps; ++i) {
+    bool coupled=false;
+    if(gpu_coupled::requested()) {
+        coupled=advanceCoupledFluids(timestep);
+        if(coupled) ++m_coupledGpuSteps; else ++m_coupledGpuFallbacks;
+    }
+    for (int i = 0; !coupled && i < m_fluidSimulationSteps; ++i) {
         {
             ENGINE_SIM_PROFILE_SCOPE(Reservoirs);
             for (int j = 0; j < exhaustSystemCount; ++j) {
@@ -394,6 +401,57 @@ double PistonEngineSimulator::getTotalExhaustFlow() const {
     return totalFlow;
 }
 
+bool PistonEngineSimulator::advanceCoupledFluids(double timestep) {
+    if(!m_engine || !gpu_pipe::enabled()) return false;
+    const int count=m_engine->getCylinderCount();
+    if(count<1 || m_pipes.size()!=static_cast<size_t>(count*2)) return false;
+    for(int i=0;i<count;++i) {
+        auto *chamber=m_engine->getChamber(i);
+        if(!chamber->supportsSeparatedPorts() || !chamber->m_system.variableProperties()
+            || m_pipes[2*i]!=chamber->intakePipe() || m_pipes[2*i+1]!=chamber->exhaustPipe()) return false;
+    }
+    for(auto *pipe:m_pipes) for(int k=0;k<pipe->count();++k)
+        if(!pipe->cell(k).variableProperties()) return false;
+    thread_local gpu_coupled::Batch batch;
+    batch.intakes.resize(m_engine->getIntakeCount()); batch.exhausts.resize(m_engine->getExhaustSystemCount());
+    for(size_t i=0;i<batch.intakes.size();++i) {
+        auto *intake=m_engine->getIntake(static_cast<int>(i));
+        if(!intake->m_system.variableProperties()) return false;
+        batch.intakes[i]={intake->flowState(),intake->flowParameters()};
+    }
+    for(size_t i=0;i<batch.exhausts.size();++i) {
+        auto *exhaust=m_engine->getExhaustSystem(static_cast<int>(i));
+        if(!exhaust->getSystem()->variableProperties()) return false;
+        batch.exhausts[i]={exhaust->flowState(),exhaust->flowParameters()};
+    }
+    batch.cylinders.resize(count); batch.pipes.resize(m_pipes.size());
+    int cells=0;
+    for(size_t i=0;i<m_pipes.size();++i) {batch.pipes[i].firstCell=cells; cells+=m_pipes[i]->count();}
+    batch.cells.resize(cells);
+    for(size_t i=0;i<m_pipes.size();++i)
+        m_pipes[i]->exportCoupled(batch.pipes[i].solver,batch.cells.data()+batch.pipes[i].firstCell);
+    for(int i=0;i<count;++i) {
+        auto *chamber=m_engine->getChamber(i); auto *head=chamber->getCylinderHead();
+        auto &out=batch.cylinders[i];
+        out.state=chamber->cylinderFlowState(); out.parameters=chamber->cylinderFlowParameters();
+        out.intakePipe=2*i; out.exhaustPipe=2*i+1;
+        out.manifoldK=chamber->manifoldCouplingK(); out.collectorK=chamber->collectorCouplingK();
+        auto *intake=head->getIntake(chamber->getPiston()->getCylinderIndex());
+        auto *exhaust=head->getExhaustSystem(chamber->getPiston()->getCylinderIndex());
+        out.intake=-1; out.exhaust=-1;
+        for(size_t j=0;j<batch.intakes.size();++j) if(m_engine->getIntake(static_cast<int>(j))==intake) out.intake=static_cast<int>(j);
+        for(size_t j=0;j<batch.exhausts.size();++j) if(m_engine->getExhaustSystem(static_cast<int>(j))==exhaust) out.exhaust=static_cast<int>(j);
+        if(out.intake<0 || out.exhaust<0) return false;
+    }
+    if(!gpu_coupled::advance(batch,timestep,m_fluidSimulationSteps)) return false;
+    for(size_t i=0;i<m_pipes.size();++i)
+        m_pipes[i]->importCoupled(batch.cells.data()+batch.pipes[i].firstCell,batch.pipes[i].solver.stableTimestep);
+    for(int i=0;i<count;++i) m_engine->getChamber(i)->applyCylinderFlowState(batch.cylinders[i].state);
+    for(size_t i=0;i<batch.intakes.size();++i) m_engine->getIntake(static_cast<int>(i))->applyFlowState(batch.intakes[i].state);
+    for(size_t i=0;i<batch.exhausts.size();++i) m_engine->getExhaustSystem(static_cast<int>(i))->applyFlowState(batch.exhausts[i].state);
+    return true;
+}
+
 void PistonEngineSimulator::endFrame() {
     Simulator::endFrame();
 
@@ -412,6 +470,7 @@ void PistonEngineSimulator::endFrame() {
 
 void PistonEngineSimulator::destroy() {
     m_pipes.clear();
+    m_coupledGpuSteps=m_coupledGpuFallbacks=0;
     endAudioRenderingThread();
     if (m_system != nullptr) m_system->reset();
 

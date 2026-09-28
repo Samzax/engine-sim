@@ -2,6 +2,7 @@
 #define ATG_ENGINE_SIM_GAS_PIPE_H
 
 #include "gas_system.h"
+#include "gas_transport.h"
 #include "gpu_pipe.h"
 #include "simulation_profile.h"
 #include <array>
@@ -34,6 +35,18 @@ public:
             cell.setGeometry(m_dx,std::sqrt(area),1,0);
             cell.m_cachedEnergy=-1;
         }
+    }
+    void exportCoupled(gpu_pipe::Pipe &out,GasSystem *cells) const {
+        out.count=count(); out.dx=m_dx; out.diameter=2*std::sqrt(m_area/constants::pi);
+        out.friction=m_frictionFactor; out.fuelMass=m_cells.front().mix().fuelMolecularMass;
+        out.stableTimestep=stableTimestep();
+        std::copy(m_cells.begin(),m_cells.end(),cells);
+    }
+    void importCoupled(const GasSystem *cells,double cfl) {
+        std::copy(cells,cells+count(),m_cells.begin());
+        m_cachedCflStates.resize(count());
+        for(int i=0;i<count();++i) std::memcpy(&m_cachedCflStates[i],&m_cells[i].m_state,sizeof(GasSystem::State));
+        m_cachedCflStep=cfl; m_cachedCflValid=true;
     }
     bool active() const {return !m_cells.empty();}
     GasSystem &first(){return m_cells.front();}
@@ -166,9 +179,7 @@ private:
     // per m^3. One fuel definition per engine is shared by every cell.
     using Vector=std::array<double,8>;
     static Vector conserved(const GasSystem &g) {
-        const auto m=g.mix(); const double c=g.n()/g.volume();
-        return {c*m.p_fuel,c*m.p_o2,c*(m.p_inert-m.p_co2-m.p_h2o),c*m.p_co2,c*m.p_h2o,
-            g.m_state.momentum[0]/g.volume(),g.totalEnergy()/g.volume(),g.mass()*m.residualFraction/g.volume()};
+        Vector u{}; GasTransport::conserved(g,u.data()); return u;
     }
     static Vector flux(const GasSystem &g,const Vector &u) {
         Vector f{}; const double v=g.velocity_x(), p=g.pressure();
@@ -177,26 +188,7 @@ private:
         return f;
     }
     static void restore(GasSystem &g,const Vector &u) {
-        double molarDensity=0;
-        for (int k=0;k<5;++k) {
-            if (!std::isfinite(u[k]) || u[k]<-1e-10)
-                throw std::runtime_error("Pipe species positivity failure");
-            molarDensity+=(std::max)(0.0,u[k]);
-        }
-        if (!(molarDensity>0)) throw std::runtime_error("Pipe lost gas density");
-        auto &m=g.m_state.mix;
-        m.p_fuel=(std::max)(0.0,u[0])/molarDensity;
-        m.p_o2=(std::max)(0.0,u[1])/molarDensity;
-        m.p_co2=(std::max)(0.0,u[3])/molarDensity;
-        m.p_h2o=(std::max)(0.0,u[4])/molarDensity;
-        m.p_inert=((std::max)(0.0,u[2])+(std::max)(0.0,u[3])+(std::max)(0.0,u[4]))/molarDensity;
-        g.m_state.n_mol=molarDensity*g.volume();
-        g.m_state.momentum[0]=u[5]*g.volume(); g.m_state.momentum[1]=0;
-        g.invalidateProperties(); g.m_cachedEnergy=-1;
-        m.residualFraction=std::clamp(u[7]*g.volume()/g.mass(),0.0,1.0);
-        g.m_state.E_k=u[6]*g.volume()-g.bulkKineticEnergy();
-        if (!std::isfinite(g.m_state.E_k) || g.m_state.E_k<=0)
-            throw std::runtime_error("Pipe internal energy positivity failure");
+        if(GasTransport::restore(g,u.data())) throw std::runtime_error("Pipe state positivity failure");
     }
     std::vector<GasSystem> m_cells;
     std::vector<GasSystem::State> m_cachedCflStates;
