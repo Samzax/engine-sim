@@ -2,6 +2,7 @@
 #define ENGINE_SIM_CHAMBER_FLOW_H
 #include "gas_system.h"
 #include "cylinder_thermal_model.h"
+#include "simulation_profile.h"
 
 // Numerical chamber stages shared by CPU scheduling and the coupled CUDA path.
 // Mechanics, ignition and dynamic flame-speed preparation occur before these.
@@ -103,7 +104,10 @@ ES_GAS_FUNCTION inline void finish(View s,const Parameters &p,double intakeFlow,
 }
 ES_GAS_FUNCTION inline void advanceDistributed(View s,const Parameters &p,
     GasSystem &intake,GasSystem &exhaust,double dt) {
-    begin(s,p,dt);
+    {
+        ENGINE_SIM_PROFILE_SCOPE(ChamberBegin);
+        begin(s,p,dt);
+    }
     const double cylinderFace=p.volume/p.cylinderHeight;
     GasSystem::FlowParameters flow{p.intakeK,dt,1,0,p.intakeArea,cylinderFace,&intake,&s.system};
     const double intakeFlow=GasSystem::flow(flow);
@@ -115,7 +119,10 @@ ES_GAS_FUNCTION inline void advanceDistributed(View s,const Parameters &p,
     const double exhaustFlow=GasSystem::flow(flow);
     s.system.dissipateExcessVelocity();
     s.system.updateVelocity(dt,0.5);
-    finish(s,p,intakeFlow,exhaustFlow,dt);
+    {
+        ENGINE_SIM_PROFILE_SCOPE(ChamberFinish);
+        finish(s,p,intakeFlow,exhaustFlow,dt);
+    }
 }
 }
 #endif

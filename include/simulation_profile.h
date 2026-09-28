@@ -6,12 +6,16 @@
 #include <cstdio>
 #include <cstdint>
 namespace simulation_profile {
-enum Phase {Step, Fluid, Reservoirs, Cfl, Ports, Pipes, DeviceWait, Count};
+enum Phase {Step, Fluid, Reservoirs, Cfl, Ports, Pipes, DeviceWait,
+    ReservoirFlow, PipeScan, ChainFlow, CylStage, ChamberBegin, ChamberFlow,
+    ChamberFinish, Count};
 struct Counters {
     double seconds[Count]{};
     uint64_t calls[Count]{};
     ~Counters() {
-        const char *names[Count]={"step","fluid","reservoirs","cfl","ports","pipes","device_wait"};
+        const char *names[Count]={"step","fluid","reservoirs","cfl","ports","pipes","device_wait",
+            "reservoir_flow","pipe_scan","chain_flow","cyl_stage","chamber_begin","chamber_flow",
+            "chamber_finish"};
         for(int i=0;i<Count;++i) if(calls[i])
             std::fprintf(stderr,"PROFILE inclusive %s calls=%llu seconds=%.9f\n",names[i],
                 static_cast<unsigned long long>(calls[i]),seconds[i]);

@@ -404,18 +404,22 @@ void PistonEngineSimulator::simulateStep_() {
                         const int reservoirCount=exhaustSystemCount+intakeCount;
                         sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
                             if(unit<exhaustSystemCount) {
+                                ENGINE_SIM_PROFILE_SCOPE(ReservoirFlow);
                                 m_engine->getExhaustSystem(unit)->process(fluidTimestep);
                             } else if(unit<reservoirCount) {
+                                ENGINE_SIM_PROFILE_SCOPE(ReservoirFlow);
                                 Intake *intake=m_engine->getIntake(unit-exhaustSystemCount);
                                 intake->process(fluidTimestep);
                                 intake->m_flowRate+=intake->m_flow;
                             } else {
+                                ENGINE_SIM_PROFILE_SCOPE(PipeScan);
                                 const int j=unit-reservoirCount;
                                 m_cflScratch[j]=m_pipes[j]->stableTimestep();
                             }
                         });
                     } else {
                         sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
+                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
                             m_cflScratch[j]=m_pipes[j]->stableTimestep();
                         });
                     }
@@ -435,11 +439,13 @@ void PistonEngineSimulator::simulateStep_() {
                             // chains off one thread's static slice.
                             sim_pool::parallelFor(2+cylinderCount,sim_pool::Split::Pull,[&](int unit) {
                                 if(unit<2) {
+                                    ENGINE_SIM_PROFILE_SCOPE(ChainFlow);
                                     for(int j=0;j<cylinderCount;++j) {
                                         if(unit==0) m_engine->getChamber(j)->flowIntakeReservoir(h);
                                         else m_engine->getChamber(j)->flowExhaustReservoir(h);
                                     }
                                 } else {
+                                    ENGINE_SIM_PROFILE_SCOPE(CylStage);
                                     m_engine->getChamber(unit-2)->flowCylinderPorts(h);
                                 }
                             });
@@ -447,12 +453,14 @@ void PistonEngineSimulator::simulateStep_() {
                             // Single-cell pipes alias chain and cylinder ends;
                             // keep the phases separate (reservoir order first).
                             sim_pool::parallelFor(2,[&](int chain) {
+                                ENGINE_SIM_PROFILE_SCOPE(ChainFlow);
                                 for(int j=0;j<cylinderCount;++j) {
                                     if(chain==0) m_engine->getChamber(j)->flowIntakeReservoir(h);
                                     else m_engine->getChamber(j)->flowExhaustReservoir(h);
                                 }
                             });
                             sim_pool::parallelFor(cylinderCount,[&](int j) {
+                                ENGINE_SIM_PROFILE_SCOPE(CylStage);
                                 m_engine->getChamber(j)->flowCylinderPorts(h);
                             });
                         }
