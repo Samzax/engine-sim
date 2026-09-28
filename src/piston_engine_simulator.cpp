@@ -1,6 +1,7 @@
 #include "../include/piston_engine_simulator.h"
 #include "../include/simulation_profile.h"
 #include "../include/gpu_coupled.h"
+#include "../include/sim_thread_pool.h"
 
 #include "../include/constants.h"
 #include "../include/units.h"
@@ -44,6 +45,7 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
 
     m_pipes.clear();
     m_coupledGpuSteps=m_coupledGpuFallbacks=0;
+    m_portsRegionMerged=false;
     const bool variableGas = engine->variableGasProperties();
     for (int i = 0; i < engine->getIntakeCount(); ++i)
         engine->getIntake(i)->configureGas(variableGas, engine->getFuel()->getMolecularMass(), engine->getFuel()->getMolecularAfr());
@@ -55,6 +57,17 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
         if (variableGas) {
             if(chamber->intakePipe()->active()) m_pipes.push_back(chamber->intakePipe());
             if(chamber->exhaustPipe()->active()) m_pipes.push_back(chamber->exhaustPipe());
+        }
+    }
+    // Reservoir chains and cylinder port stages may share one barrier when
+    // every pipe has at least two cells: chains then touch the opposite pipe
+    // end from the cylinder stages (single-cell pipes would alias them).
+    m_portsRegionMerged=true;
+    for (int i = 0; i < engine->getCylinderCount(); ++i) {
+        auto *chamber = engine->getChamber(i);
+        if (chamber->intakePipe()->count() < 2 || chamber->exhaustPipe()->count() < 2) {
+            m_portsRegionMerged = false;
+            break;
         }
     }
 
@@ -343,19 +356,26 @@ void PistonEngineSimulator::simulateStep_() {
         if(coupled) ++m_coupledGpuSteps; else ++m_coupledGpuFallbacks;
     }
     for (int i = 0; !coupled && i < m_fluidSimulationSteps; ++i) {
-        {
-            ENGINE_SIM_PROFILE_SCOPE(Reservoirs);
-            for (int j = 0; j < exhaustSystemCount; ++j) {
-                m_engine->getExhaustSystem(j)->process(fluidTimestep);
-            }
-            for (int j = 0; j < intakeCount; ++j) {
-                m_engine->getIntake(j)->process(fluidTimestep);
-                m_engine->getIntake(j)->m_flowRate += m_engine->getIntake(j)->m_flow;
-            }
-        }
         if(m_pipes.empty()) {
+            {
+                ENGINE_SIM_PROFILE_SCOPE(Reservoirs);
+                // Every exhaust system and intake owns its plenum/collector and
+                // atmosphere members, so the units are mutually disjoint.
+                sim_pool::parallelFor(exhaustSystemCount,[&](int j) {
+                    m_engine->getExhaustSystem(j)->process(fluidTimestep);
+                });
+                sim_pool::parallelFor(intakeCount,[&](int j) {
+                    Intake *intake=m_engine->getIntake(j);
+                    intake->process(fluidTimestep);
+                    intake->m_flowRate+=intake->m_flow;
+                });
+            }
             for (int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flow(fluidTimestep);
         } else {
+            // Reservoirs run once per fluid step and share the first substep's
+            // CFL barrier: reservoir systems and pipe cells are disjoint, and
+            // reservoir outputs are only read by the port phase that follows.
+            bool reservoirsPending=true;
             // Common CFL substeps let independent pipe interiors run in one batch.
             // Port exchanges retain cylinder order for shared plenums/collectors.
             double remaining=fluidTimestep;
@@ -365,21 +385,82 @@ void PistonEngineSimulator::simulateStep_() {
                 double h=remaining;
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Cfl);
-                    for(auto *pipe:m_pipes) h=(std::min)(h,pipe->stableTimestep());
+                    // Each pipe's stable step depends only on its own cells;
+                    // compute them concurrently (together with any pending
+                    // reservoir units), then fold the minimum in index order
+                    // so the reduction matches the serial loop.
+                    const int pipeCount=static_cast<int>(m_pipes.size());
+                    if(m_cflScratch.size()!=static_cast<size_t>(pipeCount)) m_cflScratch.resize(pipeCount);
+                    if(reservoirsPending) {
+                        reservoirsPending=false;
+                        const int reservoirCount=exhaustSystemCount+intakeCount;
+                        sim_pool::parallelFor(reservoirCount+pipeCount,[&](int unit) {
+                            if(unit<exhaustSystemCount) {
+                                m_engine->getExhaustSystem(unit)->process(fluidTimestep);
+                            } else if(unit<reservoirCount) {
+                                Intake *intake=m_engine->getIntake(unit-exhaustSystemCount);
+                                intake->process(fluidTimestep);
+                                intake->m_flowRate+=intake->m_flow;
+                            } else {
+                                const int j=unit-reservoirCount;
+                                m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                            }
+                        });
+                    } else {
+                        sim_pool::parallelFor(pipeCount,[&](int j) {
+                            m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                        });
+                    }
+                    // Fold the minimum in index order so the reduction matches
+                    // the serial loop.
+                    for(int j=0;j<pipeCount;++j) h=(std::min)(h,m_cflScratch[j]);
                 }
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Ports);
                     if(separatedPorts) {
-                        // Shared plenums/collectors retain cylinder order. Their
-                        // pipe endpoints are distinct from the cylinder ends,
-                        // so cylinder work can follow as an independent phase.
-                        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowReservoirPorts(h);
-                        for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowCylinderPorts(h);
+                        if(m_portsRegionMerged) {
+                            // One barrier for the whole port phase: reservoir
+                            // chains keep their cylinder order but touch
+                            // opposite pipe ends from the cylinder stages,
+                            // and the two chains are disjoint, so all units
+                            // commute when pipe cells >= 2.
+                            sim_pool::parallelFor(2+cylinderCount,[&](int unit) {
+                                if(unit<2) {
+                                    for(int j=0;j<cylinderCount;++j) {
+                                        if(unit==0) m_engine->getChamber(j)->flowIntakeReservoir(h);
+                                        else m_engine->getChamber(j)->flowExhaustReservoir(h);
+                                    }
+                                } else {
+                                    m_engine->getChamber(unit-2)->flowCylinderPorts(h);
+                                }
+                            });
+                        } else {
+                            // Single-cell pipes alias chain and cylinder ends;
+                            // keep the phases separate (reservoir order first).
+                            sim_pool::parallelFor(2,[&](int chain) {
+                                for(int j=0;j<cylinderCount;++j) {
+                                    if(chain==0) m_engine->getChamber(j)->flowIntakeReservoir(h);
+                                    else m_engine->getChamber(j)->flowExhaustReservoir(h);
+                                }
+                            });
+                            sim_pool::parallelFor(cylinderCount,[&](int j) {
+                                m_engine->getChamber(j)->flowCylinderPorts(h);
+                            });
+                        }
                     } else {
                         for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
                     }
                 }
-                GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
+                if(gpu_pipe::enabled()) {
+                    GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
+                } else {
+                    // Pipe interiors are independent (one owns its cells), so
+                    // the serial batch becomes one index per pipe.
+                    ENGINE_SIM_PROFILE_SCOPE(Pipes);
+                    sim_pool::parallelFor(static_cast<int>(m_pipes.size()),[&](int j) {
+                        m_pipes[j]->advance(h);
+                    });
+                }
                 remaining-=h;
             }
         }

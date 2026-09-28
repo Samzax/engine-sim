@@ -70,6 +70,10 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         // pipe interiors. Distinct pipe endpoints make the stages independent.
         bool supportsSeparatedPorts() const { return m_intakePipe.active() && m_exhaustPipe.active(); }
         void flowReservoirPorts(double dt);
+        // Half of the reservoir phase: each chain keeps cylinder order but
+        // the two chains are disjoint, so they may run concurrently.
+        void flowIntakeReservoir(double dt);
+        void flowExhaustReservoir(double dt);
         double manifoldCouplingK() const { return m_manifoldToRunnerFlowRate; }
         double collectorCouplingK() const { return m_primaryToCollectorFlowRate; }
         void flowCylinderPorts(double dt);
@@ -155,8 +159,6 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         GasPipe m_intakePipe, m_exhaustPipe;
         void flowStep(double dt, bool deferPipes=false, bool reservoirPortsDone=false);
         chamber_flow::View cylinderFlowView();
-        void flowIntakeReservoir(double dt);
-        void flowExhaustReservoir(double dt);
 };
 
 #endif /* ATG_ENGINE_SIM_COMBUSTION_CHAMBER_H */
