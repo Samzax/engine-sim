@@ -112,6 +112,11 @@ class GasSystem {
         ES_GAS_FUNCTION inline double bulkKineticEnergy() const;
         ES_GAS_FUNCTION inline double c() const;
         ES_GAS_FUNCTION inline double dynamicPressure(double dx, double dy) const;
+        // dynamicPressure() with heatCapacityRatio()/pressure()/density()
+        // precomputed by the caller; see the definition for the body.
+        ES_GAS_FUNCTION static double dynamicPressureFrom(double v, double hcr,
+            double staticPressure, double density, int degreesOfFreedom,
+            bool variableProperties);
         ES_GAS_FUNCTION inline double mass() const;
         ES_GAS_FUNCTION inline double pressure() const;
         ES_GAS_FUNCTION double temperature() const;
@@ -236,19 +241,12 @@ ES_GAS_FUNCTION inline double GasSystem::bulkKineticEnergy() const {
     return 0.5 * m * v_squared;
 }
 
-ES_GAS_FUNCTION inline double GasSystem::dynamicPressure(double dx, double dy) const {
-    if (n() == 0 || kineticEnergy() == 0) return 0;
-
-    const double inverseMass = 1 / this->mass();
-    const double v = inverseMass * (dx * m_state.momentum[0] + dy * m_state.momentum[1]);
-
+ES_GAS_FUNCTION inline double GasSystem::dynamicPressureFrom(double v, double hcr,
+    double staticPressure, double density, int degreesOfFreedom,
+    bool variableProperties) {
     if (v <= 0) {
         return 0;
     }
-
-    const double hcr = heatCapacityRatio();
-    const double staticPressure = pressure();
-    const double density = approximateDensity();
     const double c_squared = staticPressure * hcr / density;
     const double machNumber_squared = v * v / c_squared;
 
@@ -256,9 +254,9 @@ ES_GAS_FUNCTION inline double GasSystem::dynamicPressure(double dx, double dy) c
     // staticPressure * pow(1 + ((hcr - 1) / 2) * machNumber * machNumber, hcr / (hcr - 1)) - 1)
 
     const double x = 1 + ((hcr - 1) / 2) * machNumber_squared;
-    if (m_variableProperties) return staticPressure * (std::pow(x, hcr / (hcr - 1)) - 1);
+    if (variableProperties) return staticPressure * (std::pow(x, hcr / (hcr - 1)) - 1);
     double x_d;
-    switch (m_degreesOfFreedom) {
+    switch (degreesOfFreedom) {
     case 3:
         x_d = x * x * x * x * x;
         break;
@@ -274,6 +272,20 @@ ES_GAS_FUNCTION inline double GasSystem::dynamicPressure(double dx, double dy) c
     }
 
     return staticPressure * (std::sqrt(x_d) - 1);
+}
+
+ES_GAS_FUNCTION inline double GasSystem::dynamicPressure(double dx, double dy) const {
+    if (n() == 0 || kineticEnergy() == 0) return 0;
+
+    const double inverseMass = 1 / this->mass();
+    const double v = inverseMass * (dx * m_state.momentum[0] + dy * m_state.momentum[1]);
+
+    if (v <= 0) {
+        return 0;
+    }
+
+    return dynamicPressureFrom(v, heatCapacityRatio(), pressure(),
+        approximateDensity(), m_degreesOfFreedom, m_variableProperties);
 }
 
 ES_GAS_FUNCTION inline double GasSystem::mass() const {

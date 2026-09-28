@@ -503,10 +503,27 @@ ES_GAS_DEFINITION void GasSystem::updateVelocity(double dt, double beta) {
     double d_momentum_x = 0;
     double d_momentum_y = 0;
 
-    const double p0 = dynamicPressure(m_dx, m_dy);
-    const double p1 = dynamicPressure(-m_dx, -m_dy);
-    const double p2 = dynamicPressure(m_dy, m_dx);
-    const double p3 = dynamicPressure(-m_dy, -m_dx);
+    // One state snapshot serves all four faces: nothing mutates until after
+    // the momentum accumulation below. The zero-kinetic-energy guard mirrors
+    // dynamicPressure() so no temperature solve happens that the old path
+    // skipped.
+    const double massValue = mass();
+    const double invMass = 1 / massValue;
+    const bool noKineticEnergy = kineticEnergy() == 0;
+    const double hcr = noKineticEnergy ? 0 : heatCapacityRatio();
+    const double staticPressure = noKineticEnergy ? 0 : pressure();
+    const double density = noKineticEnergy ? 0 : approximateDensity();
+    const double momentumX = m_state.momentum[0];
+    const double momentumY = m_state.momentum[1];
+    auto face = [&](double dx, double dy) {
+        if (noKineticEnergy) return 0.0;
+        return dynamicPressureFrom(invMass * (dx * momentumX + dy * momentumY),
+            hcr, staticPressure, density, m_degreesOfFreedom, m_variableProperties);
+    };
+    const double p0 = face(m_dx, m_dy);
+    const double p1 = face(-m_dx, -m_dy);
+    const double p2 = face(m_dy, m_dx);
+    const double p3 = face(-m_dy, -m_dx);
 
     const double p_sa_0 = p0 * (m_height * depth);
     const double p_sa_1 = p1 * (m_height * depth);
@@ -525,8 +542,8 @@ ES_GAS_DEFINITION void GasSystem::updateVelocity(double dt, double beta) {
     d_momentum_x -= p_sa_3 * m_dy;
     d_momentum_y -= p_sa_3 * m_dx;
 
-    const double m = mass();
-    const double inv_m = 1 / m;
+    const double m = massValue;
+    const double inv_m = invMass;
     const double v0_x = m_state.momentum[0] * inv_m;
     const double v0_y = m_state.momentum[1] * inv_m;
 
@@ -578,12 +595,30 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(const FlowParameters &params) 
     double sourceCrossSection = 0, sinkCrossSection = 0;
     double direction = 0;
 
-    const double P_0 =
-        params.system_0->pressure()
-        + params.system_0->dynamicPressure(params.direction_x, params.direction_y);
-    const double P_1 =
-        params.system_1->pressure()
-        + params.system_1->dynamicPressure(-params.direction_x, -params.direction_y);
+    // Both systems' static/dynamic pressures come from one state snapshot
+    // each: pressure() (which may solve temperature), heatCapacityRatio(),
+    // density and mass are pure reads, and nothing mutates either system
+    // until stage 1 below, so evaluate them once per system instead of once
+    // per expression. dynamicPressureFrom() is the dynamicPressure() body.
+    const GasSystem *sys0 = params.system_0, *sys1 = params.system_1;
+    const double Pstat0 = sys0->pressure();
+    const double Pstat1 = sys1->pressure();
+    const double hcr0 = sys0->heatCapacityRatio();
+    const double hcr1 = sys1->heatCapacityRatio();
+    const double dens0 = sys0->approximateDensity();
+    const double dens1 = sys1->approximateDensity();
+    const double invMass0 = 1 / sys0->mass();
+    const double invMass1 = 1 / sys1->mass();
+    const double dyn0 = (sys0->n() == 0 || sys0->kineticEnergy() == 0) ? 0.0
+        : dynamicPressureFrom(invMass0 * (params.direction_x * sys0->m_state.momentum[0]
+            + params.direction_y * sys0->m_state.momentum[1]),
+            hcr0, Pstat0, dens0, sys0->m_degreesOfFreedom, sys0->m_variableProperties);
+    const double dyn1 = (sys1->n() == 0 || sys1->kineticEnergy() == 0) ? 0.0
+        : dynamicPressureFrom(invMass1 * (-params.direction_x * sys1->m_state.momentum[0]
+            + -params.direction_y * sys1->m_state.momentum[1]),
+            hcr1, Pstat1, dens1, sys1->m_degreesOfFreedom, sys1->m_variableProperties);
+    const double P_0 = Pstat0 + dyn0;
+    const double P_1 = Pstat1 + dyn1;
 
     if (P_0 > P_1) {
         dx = params.direction_x;
@@ -609,7 +644,7 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(const FlowParameters &params) 
     }
 
     if (params.dt <= 0 || source->n() <= 0) return 0;
-    const double gamma = source->heatCapacityRatio();
+    const double gamma = (source == sys0) ? hcr0 : hcr1;
     if(source->m_variableProperties) source->refreshFlowConstants(gamma);
     double flow = params.dt * flowRate(
         params.k_flow,
