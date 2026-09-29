@@ -372,6 +372,7 @@ void PistonEngineSimulator::simulateStep_() {
     // invalid value forces the fresh reservoir+scan region on the next step.
     bool carriedHValid=false;
     double carriedH=0;
+    bool aggregateFused=false;
     bool coupled=false;
     if(gpu_coupled::requested()) {
         coupled=advanceCoupledFluids(timestep);
@@ -510,6 +511,24 @@ void PistonEngineSimulator::simulateStep_() {
                             m_cflScratch[j]=m_pipes[j]->stableTimestep();
                         }
                     });
+                } else if((!more)&&(!hasNextStep)) {
+                    // Final advance of the mechanical step: no fold, scan or
+                    // reservoirs follow it, so each chamber-owned unit can
+                    // advance its own two pipes and aggregate them into its
+                    // own runners within one region. The standalone aggregate
+                    // region disappears; nothing before the audio write reads
+                    // the runners afterwards, and advance/aggregate both no-op
+                    // on inactive pipes, so the calls match the serial batch
+                    // plus the post-loop aggregate exactly.
+                    ENGINE_SIM_PROFILE_SCOPE(Pipes);
+                    aggregateFused=true;
+                    sim_pool::parallelFor(cylinderCount,sim_pool::Split::Pull,[&](int j) {
+                        auto *chamber=m_engine->getChamber(j);
+                        chamber->intakePipe()->advance(h);
+                        chamber->exhaustPipe()->advance(h);
+                        ENGINE_SIM_PROFILE_SCOPE(Aggregate);
+                        chamber->aggregatePipes();
+                    });
                 } else {
                     // Pipe interiors are independent (one owns their cells), so
                     // the serial batch becomes one index per pipe; cell counts
@@ -552,8 +571,9 @@ void PistonEngineSimulator::simulateStep_() {
     // Runner aggregates feed audio/readouts once per mechanical step. Port
     // exchanges use the actual cells, so intermediate snapshots are redundant.
     // Each chamber aggregates into its own two pipes and runner systems, so the
-    // per-chamber units are disjoint.
-    if(!m_pipes.empty()) {
+    // per-chamber units are disjoint. Normally the final trail region already
+    // ran them; this stays for the GPU-advance and coupled paths.
+    if(!m_pipes.empty()&&!aggregateFused) {
         ENGINE_SIM_PROFILE_SCOPE(Aggregate);
         sim_pool::parallelFor(cylinderCount,[&](int j) {
             m_engine->getChamber(j)->aggregatePipes();

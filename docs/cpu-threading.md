@@ -115,6 +115,11 @@ each); the CFL substep count `W` inside one fluid step is 1 on the Hayabusa
   different state. The chamber updates join this region (disjoint units) so
   their standalone barrier disappears; the no-pipe path and GPU-coupled mode
   keep the separate region.
+* **final advance**: the last advance of the mechanical step has no fold,
+  scan or reservoirs after it, so each chamber-owned unit advances its own
+  two pipes and aggregates them into its own runners in one region. The
+  standalone aggregate region disappears; the GPU-advance and coupled paths
+  keep it.
 * **every fluid step**: the ports region, then the advance region.
 * **the advance region trails the next fluid step's work**: each pipe's scan
   (only while another ports phase follows) and, on the last substep of fluid
@@ -125,14 +130,16 @@ each); the CFL substep count `W` inside one fluid step is 1 on the Hayabusa
   and carries `h` between fluid steps.
 
 Barrier counts per 0.25 s run (profile on, t8): hayabusa 131,560 -> 96,140
--> 91,080 (7 fewer regions per fluid step, then the chamber-update region),
-ferrari_v12 53,074 -> 44,275 -> 43,010 (fluid regions 50,544 -> 41,745; the
-extra win on the V12 comes from `W` = 2: folding the scan into the advance
-already dropped one barrier per substep). Interleaved A/B vs the previous
-commit (profile off): the trail restructure measured hayabusa avg -11.7% /
-min -13.1%, v12 avg -5.2% / min -4.2%; the chamber fusion measured hayabusa
-avg -1.3% / min -1.4%, v12 avg +0.5% / min -2.2% over 12 pairs (min is the
-robust statistic on this machine).
+-> 91,080 -> 86,020 (7 fewer regions per fluid step, then the chamber-update
+region, then the aggregate region), ferrari_v12 53,074 -> 44,275 -> 43,010
+-> 41,745 (fluid regions 50,544 -> 41,745; the extra win on the V12 comes
+from `W` = 2: folding the scan into the advance already dropped one barrier
+per substep). Interleaved A/B vs the previous commit (profile off): the
+trail restructure measured hayabusa avg -11.7% / min -13.1%, v12 avg -5.2% /
+min -4.2%; the chamber fusion hayabusa avg -1.3% / min -1.4%, v12 avg +0.5%
+/ min -2.2%; the aggregate fusion hayabusa avg -2.7% / min -2.9%, v12 avg
+-2.9% / min -3.1% (12 pairs each; min is the robust statistic on this
+machine).
 
 ## AVX2 vectorization (`ENGINE_SIM_AVX2`)
 
@@ -171,12 +178,15 @@ sim tests, then an interleaved 6-pair A/B (t8, profile off):
 | `e656c31` | one pressure snapshot per `flow`/`updateVelocity` call (`dynamicPressureFrom`) instead of one per pipe end | hayabusa -4.1% avg |
 | `d209dcb` | pipe scans fold into the advance region (drops one barrier per CFL substep where `W` > 1) | hayabusa -1.3%, v12 -5.2% avg |
 | region structure above | reservoirs + scans trail the advance; only fluid step 0 keeps its own CFL region | hayabusa -11.7%, v12 -5.2% avg |
+| `fe6fbca` | chamber updates join the fluid step 0 region (drops the chamber region) | hayabusa -1.3% avg, v12 +0.5% avg (min -1.4% / -2.2%) |
+| final-advance fusion | the last advance's region carries the per-chamber runner aggregates | hayabusa -2.7%, v12 -2.9% avg |
 
-Cumulative: t8 wall for 0.253 s simulated is now ~0.300 s (hayabusa) and
-~0.343 s (v12), i.e. ~1.19 and ~1.36 wall seconds per simulated second
-(morning session: 1.57 / 1.70). `a198afa` added the profile phases
-(`ReservoirFlow`, `PipeScan`, `ChainFlow`, `CylStage`, chamber stages) these
-counts and buckets come from.
+Cumulative: t8 wall for 0.253 s simulated is now ~0.297 s (hayabusa) and
+~0.340 s (v12), i.e. ~1.17 and ~1.35 wall seconds per simulated second
+(morning session: 1.57 / 1.70). `a198afa`/`640c804` added the profile phases
+(`ReservoirFlow`, `PipeScan`, `ChainFlow`, `CylStage`, chamber stages,
+`ChamberUpdate`, `Ignite`, `Aggregate`, `Rigid`, `Mechanics`, `AudioWrite`)
+these counts and buckets come from.
 
 ## Verification
 
