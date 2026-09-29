@@ -381,26 +381,30 @@ void PistonEngineSimulator::simulateStep_() {
             for (int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flow(fluidTimestep);
         } else {
             // Reservoirs run once per fluid step and share the first substep's
-            // CFL barrier: reservoir systems and pipe cells are disjoint, and
-            // reservoir outputs are only read by the port phase that follows.
-            bool reservoirsPending=true;
-            // Common CFL substeps let independent pipe interiors run in one batch.
-            // Port exchanges retain cylinder order for shared plenums/collectors.
+            // stability fold: reservoir systems and pipe cells are disjoint,
+            // and reservoir outputs are only read by the port phase that
+            // follows. Common CFL substeps let independent pipe interiors run
+            // in one batch. Port exchanges retain cylinder order for shared
+            // plenums/collectors. Later substeps fold the scan that trails the
+            // previous advance: ports only touch pipe end cells, so the
+            // interior scan reads the same state the old pre-ports scan saw,
+            // and the scan reuses the advance's region barrier.
             double remaining=fluidTimestep;
             int steps=0;
+            const int pipeCount=static_cast<int>(m_pipes.size());
+            if(m_cflScratch.size()!=static_cast<size_t>(pipeCount)) m_cflScratch.resize(pipeCount);
             while(remaining>0) {
                 if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
                 double h=remaining;
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Cfl);
-                    // Each pipe's stable step depends only on its own cells;
-                    // compute them concurrently (together with any pending
-                    // reservoir units), then fold the minimum in index order
-                    // so the reduction matches the serial loop.
-                    const int pipeCount=static_cast<int>(m_pipes.size());
-                    if(m_cflScratch.size()!=static_cast<size_t>(pipeCount)) m_cflScratch.resize(pipeCount);
-                    if(reservoirsPending) {
-                        reservoirsPending=false;
+                    // First substep: each pipe's stable step depends only on
+                    // its own cells; compute them concurrently (together with
+                    // the reservoir units), then fold the minimum in index
+                    // order so the reduction matches the serial loop. Later
+                    // substeps fold the scratch the previous advance region
+                    // filled.
+                    if(steps==1) {
                         const int reservoirCount=exhaustSystemCount+intakeCount;
                         sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
                             if(unit<exhaustSystemCount) {
@@ -416,11 +420,6 @@ void PistonEngineSimulator::simulateStep_() {
                                 const int j=unit-reservoirCount;
                                 m_cflScratch[j]=m_pipes[j]->stableTimestep();
                             }
-                        });
-                    } else {
-                        sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
-                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
-                            m_cflScratch[j]=m_pipes[j]->stableTimestep();
                         });
                     }
                     // Fold the minimum in index order so the reduction matches
@@ -468,15 +467,26 @@ void PistonEngineSimulator::simulateStep_() {
                         for(int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flowPorts(h);
                     }
                 }
+                const bool more=(remaining-h)>0;
                 if(gpu_pipe::enabled()) {
                     GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
+                    if(more) sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
+                        ENGINE_SIM_PROFILE_SCOPE(PipeScan);
+                        m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                    });
                 } else {
-                    // Pipe interiors are independent (one owns its cells), so
+                    // Pipe interiors are independent (one owns their cells), so
                     // the serial batch becomes one index per pipe; cell counts
-                    // weight the static slices (pipes differ ~2x in size).
+                    // weight the static slices (pipes differ ~2x in size). The
+                    // scan trails the advance on the same thread: it reads the
+                    // post-advance state the next fold always saw.
                     ENGINE_SIM_PROFILE_SCOPE(Pipes);
-                    sim_pool::parallelFor(static_cast<int>(m_pipes.size()),m_pipeWeights.data(),[&](int j) {
+                    sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
                         m_pipes[j]->advance(h);
+                        if(more) {
+                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
+                            m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                        }
                     });
                 }
                 remaining-=h;
