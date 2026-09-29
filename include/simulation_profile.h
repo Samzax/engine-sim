@@ -8,14 +8,16 @@
 namespace simulation_profile {
 enum Phase {Step, Fluid, Reservoirs, Cfl, Ports, Pipes, DeviceWait,
     ReservoirFlow, PipeScan, ChainFlow, CylStage, ChamberBegin, ChamberFlow,
-    ChamberFinish, Count};
+    ChamberFinish, ChamberUpdate, Ignite, Aggregate, Rigid, Mechanics,
+    AudioWrite, Count};
 struct Counters {
     double seconds[Count]{};
     uint64_t calls[Count]{};
     ~Counters() {
         const char *names[Count]={"step","fluid","reservoirs","cfl","ports","pipes","device_wait",
             "reservoir_flow","pipe_scan","chain_flow","cyl_stage","chamber_begin","chamber_flow",
-            "chamber_finish"};
+            "chamber_finish","chamber_update","ignite","aggregate","rigid","mechanics",
+            "audio_write"};
         for(int i=0;i<Count;++i) if(calls[i])
             std::fprintf(stderr,"PROFILE inclusive %s calls=%llu seconds=%.9f\n",names[i],
                 static_cast<unsigned long long>(calls[i]),seconds[i]);

@@ -332,13 +332,16 @@ void PistonEngineSimulator::simulateStep_() {
     ENGINE_SIM_PROFILE_SCOPE(Fluid);
     const double timestep = getTimestep();
     IgnitionModule *im = m_engine->getIgnitionModule();
-    im->update(timestep);
-
     const int cylinderCount = m_engine->getCylinderCount();
     bool separatedPorts=!m_pipes.empty();
-    for (int i = 0; i < cylinderCount; ++i) {
-        if (im->getIgnitionEvent(i)) {
-            m_engine->getChamber(i)->ignite();
+    {
+        ENGINE_SIM_PROFILE_SCOPE(Ignite);
+        im->update(timestep);
+
+        for (int i = 0; i < cylinderCount; ++i) {
+            if (im->getIgnitionEvent(i)) {
+                m_engine->getChamber(i)->ignite();
+            }
         }
     }
 
@@ -346,11 +349,14 @@ void PistonEngineSimulator::simulateStep_() {
     // so updates and per-step flow resets run concurrently. Ignition stays
     // serial above: it consumes rand() in cylinder order, and reordering those
     // draws would change results.
-    sim_pool::parallelFor(cylinderCount,[&](int i) {
-        m_engine->getChamber(i)->update(timestep);
-        m_engine->getChamber(i)->resetLastTimestepExhaustFlow();
-        m_engine->getChamber(i)->resetLastTimestepIntakeFlow();
-    });
+    {
+        ENGINE_SIM_PROFILE_SCOPE(ChamberUpdate);
+        sim_pool::parallelFor(cylinderCount,[&](int i) {
+            m_engine->getChamber(i)->update(timestep);
+            m_engine->getChamber(i)->resetLastTimestepExhaustFlow();
+            m_engine->getChamber(i)->resetLastTimestepIntakeFlow();
+        });
+    }
     for (int i = 0; i < cylinderCount; ++i) {
         separatedPorts=separatedPorts && m_engine->getChamber(i)->supportsSeparatedPorts();
     }
@@ -534,10 +540,12 @@ void PistonEngineSimulator::simulateStep_() {
     // exchanges use the actual cells, so intermediate snapshots are redundant.
     // Each chamber aggregates into its own two pipes and runner systems, so the
     // per-chamber units are disjoint.
-    if(!m_pipes.empty())
+    if(!m_pipes.empty()) {
+        ENGINE_SIM_PROFILE_SCOPE(Aggregate);
         sim_pool::parallelFor(cylinderCount,[&](int j) {
             m_engine->getChamber(j)->aggregatePipes();
         });
+    }
     im->resetIgnitionEvents();
 }
 

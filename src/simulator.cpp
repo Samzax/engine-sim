@@ -127,50 +127,59 @@ bool Simulator::simulateStep() {
     }
 
     const double timestep = getTimestep();
-    m_system->process(timestep, 1);
-
-    m_engine->setVehicleSpeed(m_vehicle->getSpeed());
-    m_engine->update(timestep);
-    m_vehicle->update(timestep);
-    m_transmission->update(timestep);
-
-    updateFilteredEngineSpeed(timestep);
-
-    Crankshaft *outputShaft = m_engine->getOutputCrankshaft();
-    outputShaft->resetAngle();
-
-    for (int i = 0; i < m_engine->getCrankshaftCount(); ++i) {
-        Crankshaft *shaft = m_engine->getCrankshaft(i);
-
-        // Correct drift (temporary hack)
-        shaft->m_body.theta = outputShaft->m_body.theta;
+    {
+        ENGINE_SIM_PROFILE_SCOPE(Rigid);
+        m_system->process(timestep, 1);
     }
 
-    const int index =
-        static_cast<int>(std::floor(DynoTorqueSamples * outputShaft->getCycleAngle() / (4 * constants::pi)));
-    const int step = m_engine->isSpinningCw() ? 1 : -1;
-    m_dynoTorqueSamples[index] = m_dyno.getTorque();
+    {
+        ENGINE_SIM_PROFILE_SCOPE(Mechanics);
+        m_engine->setVehicleSpeed(m_vehicle->getSpeed());
+        m_engine->update(timestep);
+        m_vehicle->update(timestep);
+        m_transmission->update(timestep);
 
-    if (m_lastDynoTorqueSample != index) {
-        for (int i = m_lastDynoTorqueSample + step; i != index; i += step) {
-            if (i >= DynoTorqueSamples) {
-                i = -1;
-                continue;
-            }
-            else if (i < 0) {
-                i = DynoTorqueSamples;
-                continue;
-            }
+        updateFilteredEngineSpeed(timestep);
 
-            m_dynoTorqueSamples[i] = m_dyno.getTorque();
+        Crankshaft *outputShaft = m_engine->getOutputCrankshaft();
+        outputShaft->resetAngle();
+
+        for (int i = 0; i < m_engine->getCrankshaftCount(); ++i) {
+            Crankshaft *shaft = m_engine->getCrankshaft(i);
+
+            // Correct drift (temporary hack)
+            shaft->m_body.theta = outputShaft->m_body.theta;
         }
 
-        m_lastDynoTorqueSample = index;
+        const int index =
+            static_cast<int>(std::floor(DynoTorqueSamples * outputShaft->getCycleAngle() / (4 * constants::pi)));
+        const int step = m_engine->isSpinningCw() ? 1 : -1;
+        m_dynoTorqueSamples[index] = m_dyno.getTorque();
+
+        if (m_lastDynoTorqueSample != index) {
+            for (int i = m_lastDynoTorqueSample + step; i != index; i += step) {
+                if (i >= DynoTorqueSamples) {
+                    i = -1;
+                    continue;
+                }
+                else if (i < 0) {
+                    i = DynoTorqueSamples;
+                    continue;
+                }
+
+                m_dynoTorqueSamples[i] = m_dyno.getTorque();
+            }
+
+            m_lastDynoTorqueSample = index;
+        }
     }
 
     simulateStep_();
 
-    writeToSynthesizer();
+    {
+        ENGINE_SIM_PROFILE_SCOPE(AudioWrite);
+        writeToSynthesizer();
+    }
 
     ++m_currentIteration;
     return true;
