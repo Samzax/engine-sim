@@ -358,6 +358,10 @@ void PistonEngineSimulator::simulateStep_() {
     const int exhaustSystemCount = m_engine->getExhaustSystemCount();
     const int intakeCount = m_engine->getIntakeCount();
     const double fluidTimestep = timestep / m_fluidSimulationSteps;
+    // Stability fold carried between fluid steps of one mechanical step; an
+    // invalid value forces the fresh reservoir+scan region on the next step.
+    bool carriedHValid=false;
+    double carriedH=0;
     bool coupled=false;
     if(gpu_coupled::requested()) {
         coupled=advanceCoupledFluids(timestep);
@@ -380,52 +384,56 @@ void PistonEngineSimulator::simulateStep_() {
             }
             for (int j=0;j<cylinderCount;++j) m_engine->getChamber(j)->flow(fluidTimestep);
         } else {
-            // Reservoirs run once per fluid step and share the first substep's
-            // stability fold: reservoir systems and pipe cells are disjoint,
-            // and reservoir outputs are only read by the port phase that
-            // follows. Common CFL substeps let independent pipe interiors run
-            // in one batch. Port exchanges retain cylinder order for shared
-            // plenums/collectors. Later substeps fold the scan that trails the
-            // previous advance: ports only touch pipe end cells, so the
-            // interior scan reads the same state the old pre-ports scan saw,
-            // and the scan reuses the advance's region barrier.
+            // Reservoir systems and pipe cells are disjoint, and reservoir
+            // outputs are only read by the port phase that follows, so each
+            // fluid step's reservoir units can trail the previous advance:
+            // within a mechanical step nothing runs between an advance and
+            // the next fluid step's ports (the loop only increments), so the
+            // trail sees the state the old pre-ports region saw. Only the
+            // first fluid step of a mechanical step has no predecessor to
+            // trail (mechanics/aggregate ran since), so it keeps its own
+            // reservoir+scan region, which also seeds the first fold. Later
+            // folds reuse the scratch the trailing scan filled: ports only
+            // touch pipe end cells, so the interior scan reads the same state
+            // the old pre-ports scan saw.
             double remaining=fluidTimestep;
             int steps=0;
             const int pipeCount=static_cast<int>(m_pipes.size());
             if(m_cflScratch.size()!=static_cast<size_t>(pipeCount)) m_cflScratch.resize(pipeCount);
-            while(remaining>0) {
-                if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
-                double h=remaining;
+            const int reservoirCount=exhaustSystemCount+intakeCount;
+            auto runReservoir=[&](int unit) {
+                ENGINE_SIM_PROFILE_SCOPE(ReservoirFlow);
+                if(unit<exhaustSystemCount) {
+                    m_engine->getExhaustSystem(unit)->process(fluidTimestep);
+                } else {
+                    Intake *intake=m_engine->getIntake(unit-exhaustSystemCount);
+                    intake->process(fluidTimestep);
+                    intake->m_flowRate+=intake->m_flow;
+                }
+            };
+            double h=0;
+            if(!carriedHValid) {
+                // First fluid step: each pipe's stable step depends only on
+                // its own cells; compute them concurrently (together with the
+                // reservoir units), then fold the minimum in index order so
+                // the reduction matches the serial loop.
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Cfl);
-                    // First substep: each pipe's stable step depends only on
-                    // its own cells; compute them concurrently (together with
-                    // the reservoir units), then fold the minimum in index
-                    // order so the reduction matches the serial loop. Later
-                    // substeps fold the scratch the previous advance region
-                    // filled.
-                    if(steps==1) {
-                        const int reservoirCount=exhaustSystemCount+intakeCount;
-                        sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
-                            if(unit<exhaustSystemCount) {
-                                ENGINE_SIM_PROFILE_SCOPE(ReservoirFlow);
-                                m_engine->getExhaustSystem(unit)->process(fluidTimestep);
-                            } else if(unit<reservoirCount) {
-                                ENGINE_SIM_PROFILE_SCOPE(ReservoirFlow);
-                                Intake *intake=m_engine->getIntake(unit-exhaustSystemCount);
-                                intake->process(fluidTimestep);
-                                intake->m_flowRate+=intake->m_flow;
-                            } else {
-                                ENGINE_SIM_PROFILE_SCOPE(PipeScan);
-                                const int j=unit-reservoirCount;
-                                m_cflScratch[j]=m_pipes[j]->stableTimestep();
-                            }
-                        });
-                    }
-                    // Fold the minimum in index order so the reduction matches
-                    // the serial loop.
+                    sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
+                        if(unit<reservoirCount) runReservoir(unit);
+                        else {
+                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
+                            m_cflScratch[unit-reservoirCount]=m_pipes[unit-reservoirCount]->stableTimestep();
+                        }
+                    });
+                    h=fluidTimestep;
                     for(int j=0;j<pipeCount;++j) h=(std::min)(h,m_cflScratch[j]);
                 }
+            } else {
+                h=carriedH;
+            }
+            while(remaining>0) {
+                if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Ports);
                     if(separatedPorts) {
@@ -468,28 +476,56 @@ void PistonEngineSimulator::simulateStep_() {
                     }
                 }
                 const bool more=(remaining-h)>0;
+                const bool hasNextStep=(i+1)<m_fluidSimulationSteps;
+                // Reservoirs for the next fluid step run with this advance;
+                // the scan is kept whenever another ports phase follows.
+                const bool needRes=(!more)&&hasNextStep;
+                const bool needScan=more||hasNextStep;
                 if(gpu_pipe::enabled()) {
                     GasPipe::advanceBatch(m_pipes.data(),static_cast<int>(m_pipes.size()),h);
-                    if(more) sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
-                        ENGINE_SIM_PROFILE_SCOPE(PipeScan);
-                        m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                    if(needRes||needScan) sim_pool::parallelFor((needRes?reservoirCount:0)+(needScan?pipeCount:0),sim_pool::Split::Pull,[&](int unit) {
+                        if(unit<(needRes?reservoirCount:0)) runReservoir(unit);
+                        else {
+                            const int j=unit-(needRes?reservoirCount:0);
+                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
+                            m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                        }
                     });
                 } else {
                     // Pipe interiors are independent (one owns their cells), so
                     // the serial batch becomes one index per pipe; cell counts
                     // weight the static slices (pipes differ ~2x in size). The
                     // scan trails the advance on the same thread: it reads the
-                    // post-advance state the next fold always saw.
+                    // post-advance state the next fold always saw. Reservoir
+                    // units for the next fluid step share this barrier (they
+                    // touch disjoint systems), which drops one region per
+                    // fluid step.
                     ENGINE_SIM_PROFILE_SCOPE(Pipes);
-                    sim_pool::parallelFor(pipeCount,m_pipeWeights.data(),[&](int j) {
-                        m_pipes[j]->advance(h);
-                        if(more) {
-                            ENGINE_SIM_PROFILE_SCOPE(PipeScan);
-                            m_cflScratch[j]=m_pipes[j]->stableTimestep();
+                    sim_pool::parallelFor(pipeCount+(needRes?reservoirCount:0),sim_pool::Split::Pull,[&](int unit) {
+                        if(unit<pipeCount) {
+                            m_pipes[unit]->advance(h);
+                            if(needScan) {
+                                ENGINE_SIM_PROFILE_SCOPE(PipeScan);
+                                m_cflScratch[unit]=m_pipes[unit]->stableTimestep();
+                            }
+                        } else {
+                            runReservoir(unit-pipeCount);
                         }
                     });
                 }
                 remaining-=h;
+                if(needScan) {
+                    // Fold the minimum in index order so the reduction matches
+                    // the serial loop.
+                    ENGINE_SIM_PROFILE_SCOPE(Cfl);
+                    double nh=more?remaining:fluidTimestep;
+                    for(int j=0;j<pipeCount;++j) nh=(std::min)(nh,m_cflScratch[j]);
+                    h=nh;
+                    carriedH=nh;
+                    carriedHValid=true;
+                } else {
+                    carriedHValid=false;
+                }
             }
         }
     }

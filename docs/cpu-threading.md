@@ -28,9 +28,9 @@ disjoint state; reductions are folded by the caller in index order.
 | Region | Units | Disjointness argument |
 | --- | --- | --- |
 | chamber update + flow reset | one per cylinder | each unit writes only its chamber's state and reads shared functions (`Function::sampleTriangle`, head getters) const-only; it runs before any fluid region, so nothing it reads is in flight |
-| reservoirs + CFL (merged) | exhaust systems, intakes, pipes | reservoir systems/atmospheres vs pipe cells never overlap; reservoir outputs are only read by the later port phase |
+| reservoirs + CFL (fluid step 0) | exhaust systems, intakes, pipes | reservoir systems/atmospheres vs pipe cells never overlap; reservoir outputs are only read by the later port phase. On later fluid steps these units run inside the trailing advance region instead (see the region structure below) |
 | ports (merged) | intake chain, exhaust chain, one unit per cylinder | chains touch plenums/collectors + opposite pipe ends; cylinder stages touch the chamber and the *other* pipe end; per-chamber pipes are distinct objects |
-| pipes | one per pipe | each pipe owns its cells |
+| pipes | one per pipe | each pipe owns its cells; its CFL scan trails the advance on the same thread, and the next fluid step's reservoir units share this region |
 | aggregate pipes | one per cylinder | each chamber aggregates into its own two pipes and runner systems |
 
 Ignition (`ignite()`) deliberately stays serial before the update region: it
@@ -59,11 +59,12 @@ Regions are tiny (a few microseconds), so there are 120k+ barriers per 0.25 s
 run and barrier cost dominates everything else. Two lessons:
 
 1. **Merge regions before tuning the barrier.** Reservoirs used to be their own
-   region per fluid step; they are now disjoint units of the first substep's
-   CFL region. The two port regions merged into one. Fewer barriers beat a
-   cheaper barrier. (With profiling enabled, note that the `cfl` bucket now
-   includes reservoir time on pipe-connected engines; the `reservoirs` bucket
-   only reports the no-pipe path.)
+   region per fluid step; they are now disjoint units of the first fluid step's
+   CFL region, and on later fluid steps they trail the previous advance (below).
+   The two port regions merged into one. Fewer barriers beat a cheaper barrier.
+   (With profiling enabled, note that the `cfl` bucket now includes reservoir
+   time on pipe-connected engines; the `reservoirs` bucket only reports the
+   no-pipe path.)
 2. **Never yield-loop in a barrier under background load.** The first design
    spun 4096 pauses and then fell back to `std::this_thread::yield()` until the
    last slice arrived. Yield-looping threads stay runnable and get cycled
@@ -101,6 +102,32 @@ account at exit, e.g. `[sim] barrier: 1052480 calls, wall 0.155362s, ...` -
 (sum of per-thread times / threads), which is the first number to watch when
 tuning region structure.
 
+### Fluid-step region structure (2026-09-28)
+
+A mechanical step runs `m_fluidSimulationSteps` = 8 fluid steps (timestep/8
+each); the CFL substep count `W` inside one fluid step is 1 on the Hayabusa
+(CFL never binds) and 2 on the V12. The per-mechanical-step structure is:
+
+* **fluid step 0**: one region with the reservoir units + per-pipe stability
+  scans, then the fold in pipe-index order. This is the only fluid step with
+  no predecessor to trail: mechanics and the runner aggregate ran since the
+  previous advance, so its scan/reservoir read different state.
+* **every fluid step**: the ports region, then the advance region.
+* **the advance region trails the next fluid step's work**: each pipe's scan
+  (only while another ports phase follows) and, on the last substep of fluid
+  step *i*, fluid step *i+1*'s reservoir units. Nothing runs between an
+  advance and the next fluid step's ports (the loop only increments), and
+  ports only touch pipe end cells, so those units observe exactly the state
+  the old pre-ports region saw; the fold reuses the trailing scan's scratch
+  and carries `h` between fluid steps.
+
+Barrier counts per 0.25 s run (profile on, t8): hayabusa 131,560 -> 96,140
+(7 fewer regions per fluid step), ferrari_v12 53,074 -> 44,275 (fluid regions
+50,544 -> 41,745; the extra win on the V12 comes from `W` = 2: folding the
+scan into the advance already dropped one barrier per substep). Interleaved
+6-pair A/B vs the previous commit (profile off): hayabusa avg -11.7% /
+min -13.1%, v12 avg -5.2% / min -4.2%.
+
 ## AVX2 vectorization (`ENGINE_SIM_AVX2`)
 
 The base fluid work (not just the overhead) was vectorized in two steps, both
@@ -124,6 +151,26 @@ Measured with interleaved run-by-run A/B against the scalar reference binary
 (medians of pairs, t8): hayabusa 0.390-0.400 vs 0.410-0.442, v12 0.426-0.434
 vs 0.447-0.454, i.e. roughly -5% wall on both engines at t8 and -8% at t1.
 The third planned step (weighted slices, above) added nothing measurable.
+
+## Serial-work trims after threading
+
+Scalar trims on top of the threaded structure. Each was verified the same way:
+scalar-metric equality vs the reference binary at t1/t8 on both engines, 64/64
+sim tests, then an interleaved 6-pair A/B (t8, profile off):
+
+| Commit | Change | A/B vs its base |
+| --- | --- | --- |
+| `456653b` | `GasPipe::advance` derives its CFL step from the state precompute pass instead of re-walking the cells | hayabusa -3.8% avg |
+| `b7ef89b` | property refresh hoisted out of the temperature Newton loop (`molarEnergyFast`/`molarCvFast`) | hayabusa -3.9%, v12 -3.6% avg |
+| `e656c31` | one pressure snapshot per `flow`/`updateVelocity` call (`dynamicPressureFrom`) instead of one per pipe end | hayabusa -4.1% avg |
+| `d209dcb` | pipe scans fold into the advance region (drops one barrier per CFL substep where `W` > 1) | hayabusa -1.3%, v12 -5.2% avg |
+| region structure above | reservoirs + scans trail the advance; only fluid step 0 keeps its own CFL region | hayabusa -11.7%, v12 -5.2% avg |
+
+Cumulative: t8 wall for 0.253 s simulated is now ~0.300 s (hayabusa) and
+~0.343 s (v12), i.e. ~1.19 and ~1.36 wall seconds per simulated second
+(morning session: 1.57 / 1.70). `a198afa` added the profile phases
+(`ReservoirFlow`, `PipeScan`, `ChainFlow`, `CylStage`, chamber stages) these
+counts and buckets come from.
 
 ## Verification
 
