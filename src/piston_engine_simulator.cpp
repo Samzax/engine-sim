@@ -345,11 +345,15 @@ void PistonEngineSimulator::simulateStep_() {
         }
     }
 
-    // Chambers write per-chamber state and read shared functions const-only,
-    // so updates and per-step flow resets run concurrently. Ignition stays
-    // serial above: it consumes rand() in cylinder order, and reordering those
-    // draws would change results.
-    {
+    // Chambers write per-chamber state and read shared functions const-only.
+    // Ignition stays serial above: it consumes rand() in cylinder order, and
+    // reordering those draws would change results. On the normal CPU path the
+    // updates join the first fluid step's reservoir+scan region (disjoint
+    // units, still before any port phase); the no-pipe path and GPU-coupled
+    // mode keep the standalone region, the latter because coupled fluid reads
+    // chamber flow state.
+    const bool chamberRanOutside=m_pipes.empty()||gpu_coupled::requested();
+    if(chamberRanOutside) {
         ENGINE_SIM_PROFILE_SCOPE(ChamberUpdate);
         sim_pool::parallelFor(cylinderCount,[&](int i) {
             m_engine->getChamber(i)->update(timestep);
@@ -421,15 +425,24 @@ void PistonEngineSimulator::simulateStep_() {
             if(!carriedHValid) {
                 // First fluid step: each pipe's stable step depends only on
                 // its own cells; compute them concurrently (together with the
-                // reservoir units), then fold the minimum in index order so
-                // the reduction matches the serial loop.
+                // reservoir units and, on the normal CPU path, the chamber
+                // updates - all disjoint systems), then fold the minimum in
+                // index order so the reduction matches the serial loop.
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Cfl);
-                    sim_pool::parallelFor(reservoirCount+pipeCount,sim_pool::Split::Pull,[&](int unit) {
-                        if(unit<reservoirCount) runReservoir(unit);
-                        else {
+                    const int chamberUnits=chamberRanOutside?0:cylinderCount;
+                    const int unitCount=chamberUnits+reservoirCount+pipeCount;
+                    sim_pool::parallelFor(unitCount,sim_pool::Split::Pull,[&](int unit) {
+                        if(unit<chamberUnits) {
+                            ENGINE_SIM_PROFILE_SCOPE(ChamberUpdate);
+                            m_engine->getChamber(unit)->update(timestep);
+                            m_engine->getChamber(unit)->resetLastTimestepExhaustFlow();
+                            m_engine->getChamber(unit)->resetLastTimestepIntakeFlow();
+                        } else if(unit<chamberUnits+reservoirCount) {
+                            runReservoir(unit-chamberUnits);
+                        } else {
                             ENGINE_SIM_PROFILE_SCOPE(PipeScan);
-                            m_cflScratch[unit-reservoirCount]=m_pipes[unit-reservoirCount]->stableTimestep();
+                            m_cflScratch[unit-chamberUnits-reservoirCount]=m_pipes[unit-chamberUnits-reservoirCount]->stableTimestep();
                         }
                     });
                     h=fluidTimestep;

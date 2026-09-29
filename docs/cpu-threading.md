@@ -108,10 +108,13 @@ A mechanical step runs `m_fluidSimulationSteps` = 8 fluid steps (timestep/8
 each); the CFL substep count `W` inside one fluid step is 1 on the Hayabusa
 (CFL never binds) and 2 on the V12. The per-mechanical-step structure is:
 
-* **fluid step 0**: one region with the reservoir units + per-pipe stability
-  scans, then the fold in pipe-index order. This is the only fluid step with
-  no predecessor to trail: mechanics and the runner aggregate ran since the
-  previous advance, so its scan/reservoir read different state.
+* **fluid step 0**: one region with the chamber updates, reservoir units and
+  per-pipe stability scans, then the fold in pipe-index order. This is the
+  only fluid step with no predecessor to trail: mechanics and the runner
+  aggregate ran since the previous advance, so its scan/reservoir read
+  different state. The chamber updates join this region (disjoint units) so
+  their standalone barrier disappears; the no-pipe path and GPU-coupled mode
+  keep the separate region.
 * **every fluid step**: the ports region, then the advance region.
 * **the advance region trails the next fluid step's work**: each pipe's scan
   (only while another ports phase follows) and, on the last substep of fluid
@@ -122,11 +125,14 @@ each); the CFL substep count `W` inside one fluid step is 1 on the Hayabusa
   and carries `h` between fluid steps.
 
 Barrier counts per 0.25 s run (profile on, t8): hayabusa 131,560 -> 96,140
-(7 fewer regions per fluid step), ferrari_v12 53,074 -> 44,275 (fluid regions
-50,544 -> 41,745; the extra win on the V12 comes from `W` = 2: folding the
-scan into the advance already dropped one barrier per substep). Interleaved
-6-pair A/B vs the previous commit (profile off): hayabusa avg -11.7% /
-min -13.1%, v12 avg -5.2% / min -4.2%.
+-> 91,080 (7 fewer regions per fluid step, then the chamber-update region),
+ferrari_v12 53,074 -> 44,275 -> 43,010 (fluid regions 50,544 -> 41,745; the
+extra win on the V12 comes from `W` = 2: folding the scan into the advance
+already dropped one barrier per substep). Interleaved A/B vs the previous
+commit (profile off): the trail restructure measured hayabusa avg -11.7% /
+min -13.1%, v12 avg -5.2% / min -4.2%; the chamber fusion measured hayabusa
+avg -1.3% / min -1.4%, v12 avg +0.5% / min -2.2% over 12 pairs (min is the
+robust statistic on this machine).
 
 ## AVX2 vectorization (`ENGINE_SIM_AVX2`)
 
