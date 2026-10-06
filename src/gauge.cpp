@@ -54,15 +54,21 @@ void Gauge::update(float dt) {
     }
     const float value = std::fmaxf((float)m_min, std::fmin((float)m_max, (float)m_value));
     const float needle_s = std::powf((value - m_min) / std::abs(m_max - m_min), m_gamma);
-    const float F =
-        m_needleKs * (needle_s - m_needlePosition)
-        - m_needleKd * m_needleVelocity;
+    int steps = (int)std::ceil(dt * 120.0f);
+    if (steps < 1) steps = 1;
+    if (steps > 4096) steps = 4096;
+    const float h = dt / (float)steps;
+    for (int i = 0; i < steps; ++i) {
+        const float F =
+            m_needleKs * (needle_s - m_needlePosition)
+            - m_needleKd * m_needleVelocity;
 
-    m_needleVelocity = std::fminf(
-            m_needleMaxVelocity,
-            std::fmaxf(m_needleVelocity + F * dt, -m_needleMaxVelocity));
-    m_needlePosition += m_needleVelocity * dt;
-    m_needlePosition = std::fmax(0.0f, std::fmin(1.0f, m_needlePosition));
+        m_needleVelocity = std::fminf(
+                m_needleMaxVelocity,
+                std::fmaxf(m_needleVelocity + F * h, -m_needleMaxVelocity));
+        m_needlePosition += m_needleVelocity * h;
+        m_needlePosition = std::fmax(0.0f, std::fmin(1.0f, m_needlePosition));
+    }
 }
 
 void Gauge::render() {

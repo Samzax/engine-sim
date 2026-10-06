@@ -56,6 +56,7 @@ The UI is extremely minimalistic and there are only a few controls used to inter
 | M | Increase view layer |
 | , | Decrease view layer |
 | Enter | Reload engine script |
+| L or LOAD SCRIPT button | Load a different engine script from a file dialog (keeps the current engine if loading fails) |
 | Home | Fit the engine in the view without restarting it |
 | Escape | Exit the program |
 | Q, W, E, R | Hold for 1%, 10%, 20%, or 100% speed-control input |

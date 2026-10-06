@@ -335,6 +335,7 @@ add_executable(engine-sim-app WIN32
 
 target_link_libraries(engine-sim-app
     engine-sim
+    comdlg32
 )
 
 if (DTV)

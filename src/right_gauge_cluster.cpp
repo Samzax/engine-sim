@@ -187,6 +187,16 @@ void RightGaugeCluster::render() {
 
 void RightGaugeCluster::setEngine(Engine *engine) {
     m_engine = engine;
+
+    m_combusionChamberStatus->m_engine = engine;
+    m_throttleDisplay->m_engine = engine;
+    m_afrCluster->m_engine = engine;
+    m_fuelCluster->m_engine = engine;
+}
+
+void RightGaugeCluster::setSimulator(Simulator *simulator) {
+    m_simulator = simulator;
+    m_fuelCluster->m_simulator = simulator;
 }
 
 void RightGaugeCluster::renderTachSpeedCluster(const Bounds &bounds) {

@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <cstring>
 #include "delta-studio/include/yds_windows_window.h"
+#include <commdlg.h>
 
 #include "../scripting/include/compiler.h"
 
@@ -572,6 +573,10 @@ void EngineSimApplication::run(int maxFrames) {
             if (m_screen > 2) m_screen = 0;
         }
 
+        if (m_engine.ProcessKeyDown(ysKey::Code::L)) {
+            openScriptPicker();
+        }
+
         if (m_engine.ProcessKeyDown(ysKey::Code::F)) {
             if (m_engine.GetGameWindow()->GetWindowStyle() != ysWindow::WindowStyle::Fullscreen) {
                 m_engine.GetGameWindow()->SetWindowStyle(ysWindow::WindowStyle::Fullscreen);
@@ -937,6 +942,87 @@ void EngineSimApplication::loadScript(const std::string &scriptPath) {
     }
     configure(settings);
     refreshUserInterface();
+}
+
+void EngineSimApplication::openScriptPicker() {
+    char file[MAX_PATH] = "";
+    OPENFILENAMEA dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = static_cast<ysWindowsWindow *>(m_engine.GetGameWindow())->GetWindowHandle();
+    dialog.lpstrFilter = "Engine script (*.mr)\0*.mr\0All files (*.*)\0*.*\0";
+    dialog.lpstrFile = file;
+    dialog.nMaxFile = MAX_PATH;
+    const std::string initialDirectory = m_assetPath + "/engines";
+    dialog.lpstrInitialDir = initialDirectory.c_str();
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (!GetOpenFileNameA(&dialog)) {
+        m_infoCluster->setLogMessage("Load script cancelled");
+        return;
+    }
+
+    const std::filesystem::path picked(file);
+    std::error_code equivalentError;
+    // loadScript("") re-loads main.mr directly; importing it through the
+    // wrapper would execute main() twice.
+    const bool isDefaultScript = std::filesystem::equivalent(
+        picked, std::filesystem::path(m_assetPath) / "main.mr", equivalentError);
+
+    std::string scriptPath;
+    if (!isDefaultScript) {
+        const std::filesystem::path wrapper = std::filesystem::path(m_assetPath) / "picked_engine.mr";
+        std::error_code relativeError;
+        const std::filesystem::path relative =
+            std::filesystem::relative(picked, wrapper.parent_path(), relativeError);
+        const std::string importPath = (relativeError || relative.empty())
+            ? picked.generic_string()
+            : relative.generic_string();
+
+        std::ofstream wrapperFile(wrapper, std::ios::trunc);
+        if (!wrapperFile) {
+            m_infoCluster->setLogMessage("Could not write picked_engine.mr");
+            return;
+        }
+        wrapperFile
+            << "import \"engine_sim.mr\"\n"
+            << "import \"themes/default.mr\"\n"
+            << "import \"" << importPath << "\"\n"
+            << "\n"
+            << "use_default_theme()\n"
+            << "main()\n";
+        wrapperFile.close();
+        if (!wrapperFile) {
+            m_infoCluster->setLogMessage("Could not write picked_engine.mr");
+            return;
+        }
+        scriptPath = wrapper.string();
+    }
+
+    const auto setPlaybackMode = [this](ysAudioSource::Mode mode, const char *failure) {
+        const ysError error = m_audioSource->SetMode(mode);
+        if (error == ysError::None) return true;
+        const std::string message = std::string(failure) + " (error "
+            + std::to_string(static_cast<int>(error)) + ")";
+        std::ofstream log("error_log.log", std::ios::app);
+        log << message << '\n';
+        m_infoCluster->setLogMessage(message);
+        return false;
+    };
+
+    if (!setPlaybackMode(ysAudioSource::Mode::Stop, "Load cancelled: audio could not stop")) {
+        return;
+    }
+
+    Simulator *previous = m_simulator;
+    loadScript(scriptPath);
+    if (m_simulator != previous) {
+        m_infoCluster->setLogMessage("Loaded: " + (m_iceEngine != nullptr
+            ? m_iceEngine->getName()
+            : picked.filename().string()));
+    }
+    if (m_simulator != nullptr && m_simulator->getEngine() != nullptr) {
+        setPlaybackMode(ysAudioSource::Mode::Loop, "Audio could not restart; press Enter to retry");
+    }
 }
 
 void EngineSimApplication::processEngineInput() {
@@ -1353,7 +1439,7 @@ void EngineSimApplication::refreshUserInterface() {
     m_infoCluster = m_uiManager.getRoot()->addElement<InfoCluster>();
 
     m_infoCluster->setEngine(m_iceEngine);
-    m_rightGaugeCluster->m_simulator = m_simulator;
+    m_rightGaugeCluster->setSimulator(m_simulator);
     m_rightGaugeCluster->setEngine(m_iceEngine);
     m_oscCluster->setSimulator(m_simulator);
     if (m_iceEngine != nullptr) {

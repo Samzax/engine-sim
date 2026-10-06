@@ -8,6 +8,7 @@
 
 InfoCluster::InfoCluster() {
     m_engine = nullptr;
+    m_loadScriptButton = nullptr;
     m_logMessage = "Started";
 }
 
@@ -17,6 +18,10 @@ InfoCluster::~InfoCluster() {
 
 void InfoCluster::initialize(EngineSimApplication *app) {
     UiElement::initialize(app);
+
+    m_loadScriptButton = addElement<UiButton>(this);
+    m_loadScriptButton->m_text = "LOAD SCRIPT";
+    m_loadScriptButton->m_fontSize = 20.0f;
 }
 
 void InfoCluster::destroy() {
@@ -24,7 +29,20 @@ void InfoCluster::destroy() {
 }
 
 void InfoCluster::update(float dt) {
+    if (m_loadScriptButton != nullptr) {
+        Grid grid;
+        grid.h_cells = 6;
+        grid.v_cells = 4;
+        m_loadScriptButton->m_bounds = grid.get(m_bounds, 4, 3, 2, 1);
+    }
+
     UiElement::update(dt);
+}
+
+void InfoCluster::signal(UiElement *element, Event event) {
+    if (element == m_loadScriptButton && event == Event::Clicked) {
+        m_app->openScriptPicker();
+    }
 }
 
 void InfoCluster::render() {
@@ -107,7 +125,8 @@ void InfoCluster::render() {
     const Bounds infoMessagesBounds = grid.get(m_bounds, 0, 3, 6, 1);
     drawFrame(infoMessagesBounds, 1.0f, m_app->getForegroundColor(), m_app->getBackgroundColor());
 
-    const Bounds messageBounds = infoMessagesBounds.inset(10.0f);
+    // The right third of the row is occupied by the LOAD SCRIPT button.
+    const Bounds messageBounds = grid.get(m_bounds, 0, 3, 4, 1).inset(10.0f);
     float messageSize = 24.0f;
     const float messageWidth = m_app->getTextRenderer()->CalculateWidth(m_logMessage, messageSize);
     if (messageWidth > messageBounds.width() && messageWidth > 0)
@@ -119,4 +138,6 @@ void InfoCluster::render() {
         messageSize,
         Bounds::lm,
         Bounds::lm);
+
+    UiElement::render();
 }

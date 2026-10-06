@@ -89,6 +89,8 @@ class EngineSimApplication {
         InfoCluster *getInfoCluster() { return m_infoCluster; }
         ApplicationSettings* getAppSettings() { return &m_applicationSettings; }
 
+        void openScriptPicker();
+
     protected:
         void loadScript(const std::string &scriptPath = "");
         void processEngineInput();

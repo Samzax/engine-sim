@@ -103,7 +103,7 @@ void FiringOrderDisplay::render() {
             CombustionChamber *chamber = m_engine->getChamber(i);
             CylinderBank *bank = piston->getCylinderBank();
             const int bankIndex = bankToIndex[bank];
-            const double lit = m_cylinderLit[i];
+            const double lit = (m_cylinderLit != nullptr) ? m_cylinderLit[i] : 0.0;
 
             const Bounds &b = grid.get(body, banks - bankIndex - 1, 0);
 

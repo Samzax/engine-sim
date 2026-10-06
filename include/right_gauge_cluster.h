@@ -24,6 +24,7 @@ class RightGaugeCluster : public UiElement {
         virtual void render();
 
         void setEngine(Engine *engine);
+        void setSimulator(Simulator *simulator);
         void setUnits();
         double getManifoldPressureWithUnits(double ambientPressure);
 

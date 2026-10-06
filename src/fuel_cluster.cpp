@@ -70,7 +70,8 @@ void FuelCluster::render() {
         << "$" << estimatedUsdPerGallon << " USD/US GAL";
     drawText(ss.str(), grid.get(bodyBounds, 0, 5), 10.0f, Bounds::lm);
 
-    const double travelledDistance = (m_simulator->getVehicle() != nullptr)
+    const double travelledDistance = (m_simulator != nullptr
+        && m_simulator->getVehicle() != nullptr)
         ? m_simulator->getVehicle()->getTravelledDistance()
         : 0.0;
     const bool hasEconomyData = std::isfinite(travelledDistance)
