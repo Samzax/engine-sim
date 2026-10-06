@@ -13,3 +13,9 @@ compile_commands.json
 
 # Wrapper written by the in-app LOAD SCRIPT picker
 assets/picked_engine.mr
+
+# CTest output and runtime artifacts
+Testing/
+error_log.log
+gas_system_test_output.csv
+intake_stroke.csv
