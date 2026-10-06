@@ -26,13 +26,39 @@ struct Counters {
 inline Counters &counters() {thread_local Counters value;return value;}
 struct ThermoCounters {
     uint64_t newtonCalls=0, newtonIters=0, refreshProps=0, flowParams=0;
+    uint64_t tempQueries=0, tempHits=0, invalidates=0, restores=0, restoreNoOp=0;
+    // Batch B: where the fluid time actually goes. All are thread_local; sum
+    // the per-thread lines when reading them.
+    uint64_t bisectionCalls=0, trialCopies=0;   // GasSystem::flow sign bisection
+    uint64_t cflCacheHits=0, cflCacheRecomputes=0; // GasPipe::stableTimestep cache
+    uint64_t advanceCalls=0, advanceSubsteps=0; // GasPipe::advance substep loop
+    uint64_t exchangeCalls=0, exchangeIters=0;  // CylinderThermalModel::exchange
+    uint64_t fluidSlices=0, cflBinds=0;         // piston sim fluid-step slices
     ~ThermoCounters() {
-        if (newtonCalls||newtonIters||refreshProps||flowParams)
-            std::fprintf(stderr,"THERMO newton_calls=%llu newton_iters=%llu refresh=%llu flow=%llu\n",
+        if (newtonCalls||newtonIters||refreshProps||flowParams||tempQueries||restores||invalidates
+            ||bisectionCalls||cflCacheHits||advanceCalls||exchangeCalls||fluidSlices)
+            std::fprintf(stderr,
+                "THERMO newton_calls=%llu newton_iters=%llu refresh=%llu flow=%llu queries=%llu hits=%llu invalidates=%llu restores=%llu restore_noop=%llu\n"
+                "THERMO2 bisection_calls=%llu trial_copies=%llu cfl_cache_hits=%llu cfl_cache_recomputes=%llu advance_calls=%llu advance_substeps=%llu exchange_calls=%llu exchange_iters=%llu fluid_slices=%llu cfl_binds=%llu\n",
                 static_cast<unsigned long long>(newtonCalls),
                 static_cast<unsigned long long>(newtonIters),
                 static_cast<unsigned long long>(refreshProps),
-                static_cast<unsigned long long>(flowParams));
+                static_cast<unsigned long long>(flowParams),
+                static_cast<unsigned long long>(tempQueries),
+                static_cast<unsigned long long>(tempHits),
+                static_cast<unsigned long long>(invalidates),
+                static_cast<unsigned long long>(restores),
+                static_cast<unsigned long long>(restoreNoOp),
+                static_cast<unsigned long long>(bisectionCalls),
+                static_cast<unsigned long long>(trialCopies),
+                static_cast<unsigned long long>(cflCacheHits),
+                static_cast<unsigned long long>(cflCacheRecomputes),
+                static_cast<unsigned long long>(advanceCalls),
+                static_cast<unsigned long long>(advanceSubsteps),
+                static_cast<unsigned long long>(exchangeCalls),
+                static_cast<unsigned long long>(exchangeIters),
+                static_cast<unsigned long long>(fluidSlices),
+                static_cast<unsigned long long>(cflBinds));
     }
 };
 inline ThermoCounters &thermo() {thread_local ThermoCounters value;return value;}

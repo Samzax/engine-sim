@@ -87,6 +87,7 @@ private node _engine => __engine_sim__engine {
     input dynamic_combustion [bool];
     input pipe_cells [int];
     input pipe_friction_factor [float];
+    input fluid_steps [int];
     input oil_model [bool];
     input oil_temperature [float];
     input oil_viscosity_40 [float];
@@ -127,6 +128,7 @@ public node engine {
     input dynamic_combustion: true;
     input pipe_cells: 8;
     input pipe_friction_factor: 0.02;
+    input fluid_steps: 8;
     input oil_model: true;
     input oil_temperature: 363.15; // K
     input oil_viscosity_40: 80.0; // cSt at 40 C
@@ -166,6 +168,7 @@ public node engine {
             dynamic_combustion: dynamic_combustion,
             pipe_cells: pipe_cells,
             pipe_friction_factor: pipe_friction_factor,
+            fluid_steps: fluid_steps,
             oil_model: oil_model,
             oil_temperature: oil_temperature,
             oil_viscosity_40: oil_viscosity_40,

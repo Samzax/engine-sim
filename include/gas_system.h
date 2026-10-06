@@ -7,6 +7,9 @@
 
 #include <cfloat>
 #include <cmath>
+#ifdef ENGINE_SIM_PROFILE
+#include "simulation_profile.h"
+#endif
 
 class GasSystem {
     friend class GasPipe;
@@ -154,7 +157,12 @@ class GasSystem {
         // Choked-flow factors depend only on gamma, not pressure, volume or mass.
         mutable double m_flowGamma=-1, m_flowChokedLimit=0, m_flowChokedFactor=0;
         ES_GAS_FUNCTION void refreshFlowConstants(double gamma) const;
-        ES_GAS_FUNCTION void invalidateProperties() const { m_propertiesValid=false; m_massPropertiesValid=false; }
+        ES_GAS_FUNCTION void invalidateProperties() const {
+#ifdef ENGINE_SIM_PROFILE
+            ++simulation_profile::thermo().invalidates;
+#endif
+            m_propertiesValid=false; m_massPropertiesValid=false;
+        }
         ES_GAS_FUNCTION void refreshMass() const {
             if (!m_massPropertiesValid) {
                 m_molarMass=molecularMass(m_state.mix);

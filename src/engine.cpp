@@ -45,6 +45,7 @@ Engine::Engine() {
     m_initialHighFrequencyGain = 0.01;
     m_initialJitter = 0.5;
     m_initialNoise = 1.0;
+    m_fluidSteps = 8;
 }
 
 Engine::~Engine() {
@@ -77,6 +78,7 @@ void Engine::initialize(const Parameters &params) {
     m_initialSimulationFrequency = params.initialSimulationFrequency;
     m_initialJitter = params.initialJitter;
     m_initialNoise = params.initialNoise;
+    m_fluidSteps = params.fluidSteps;
 
     m_crankshafts = new Crankshaft[m_crankshaftCount];
     m_cylinderBanks = new CylinderBank[m_cylinderBankCount];
@@ -446,7 +448,7 @@ Simulator *Engine::createSimulator(Vehicle *vehicle, Transmission *transmission)
     simulator->setSimulationFrequency(static_cast<int>(frequency));
 
     simulator->loadSimulation(this, vehicle, transmission);
-    simulator->setFluidSimulationSteps(8);
+    simulator->setFluidSimulationSteps(m_fluidSteps);
 
     return simulator.release();
 }

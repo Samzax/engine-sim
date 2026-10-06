@@ -75,9 +75,17 @@ public:
             for(size_t i=0;same && i<m_cells.size();++i)
                 same=m_cells[i].m_variableProperties && std::memcmp(
                     &m_cachedCflStates[i],&m_cells[i].m_state,sizeof(GasSystem::State))==0;
-            if(same) return m_cachedCflStep;
+            if(same) {
+#ifdef ENGINE_SIM_PROFILE
+                ++simulation_profile::thermo().cflCacheHits;
+#endif
+                return m_cachedCflStep;
+            }
             m_cachedCflValid=false;
         }
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().cflCacheRecomputes;
+#endif
         double speed=1;
         for (const auto &cell:m_cells) speed=(std::max)(speed,std::abs(cell.velocity_x())+cell.c());
         return 0.25*m_dx/speed;
@@ -85,6 +93,9 @@ public:
 
     void advance(double dt) {
         if (!active()) return;
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().advanceCalls;
+#endif
         const double diameter=2*std::sqrt(m_area/constants::pi);
         int steps=0;
         while (dt>0) {
@@ -145,6 +156,9 @@ public:
             }
             dt-=h;
         }
+#ifdef ENGINE_SIM_PROFILE
+        simulation_profile::thermo().advanceSubsteps+=steps;
+#endif
     }
 
     static void advancePair(GasPipe &a, GasPipe &b, double dt) {

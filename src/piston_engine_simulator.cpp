@@ -59,9 +59,6 @@ void PistonEngineSimulator::loadSimulation(Engine *engine, Vehicle *vehicle, Tra
             if(chamber->exhaustPipe()->active()) m_pipes.push_back(chamber->exhaustPipe());
         }
     }
-    m_pipeWeights.clear();
-    m_pipeWeights.reserve(m_pipes.size());
-    for (GasPipe *pipe : m_pipes) m_pipeWeights.push_back(pipe->count());
     // Reservoir chains and cylinder port stages may share one barrier when
     // every pipe has at least two cells: chains then touch the opposite pipe
     // end from the cylinder stages (single-cell pipes would alias them).
@@ -448,12 +445,18 @@ void PistonEngineSimulator::simulateStep_() {
                     });
                     h=fluidTimestep;
                     for(int j=0;j<pipeCount;++j) h=(std::min)(h,m_cflScratch[j]);
+#ifdef ENGINE_SIM_PROFILE
+                    if(h<fluidTimestep) ++simulation_profile::thermo().cflBinds;
+#endif
                 }
             } else {
                 h=carriedH;
             }
             while(remaining>0) {
                 if(++steps>10000) throw std::runtime_error("Pipe coupling exceeded substep limit");
+#ifdef ENGINE_SIM_PROFILE
+                ++simulation_profile::thermo().fluidSlices;
+#endif
                 {
                     ENGINE_SIM_PROFILE_SCOPE(Ports);
                     if(separatedPorts) {
@@ -531,8 +534,8 @@ void PistonEngineSimulator::simulateStep_() {
                     });
                 } else {
                     // Pipe interiors are independent (one owns their cells), so
-                    // the serial batch becomes one index per pipe; cell counts
-                    // weight the static slices (pipes differ ~2x in size). The
+                    // the serial batch becomes one index per pipe; dynamic pull
+                    // keeps arrival skew low while pipes differ ~2x in size. The
                     // scan trails the advance on the same thread: it reads the
                     // post-advance state the next fold always saw. Reservoir
                     // units for the next fluid step share this barrier (they
@@ -557,7 +560,13 @@ void PistonEngineSimulator::simulateStep_() {
                     // the serial loop.
                     ENGINE_SIM_PROFILE_SCOPE(Cfl);
                     double nh=more?remaining:fluidTimestep;
+#ifdef ENGINE_SIM_PROFILE
+                    const double nominal=nh;
+#endif
                     for(int j=0;j<pipeCount;++j) nh=(std::min)(nh,m_cflScratch[j]);
+#ifdef ENGINE_SIM_PROFILE
+                    if(nh<nominal) ++simulation_profile::thermo().cflBinds;
+#endif
                     h=nh;
                     carriedH=nh;
                     carriedHValid=true;

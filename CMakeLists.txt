@@ -414,13 +414,19 @@ if (PIRANHA_ENABLED)
 endif()
 gtest_discover_tests(engine-sim-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 
+endif()
+
 # The gas headers are inline-heavy, so every target compiling them must agree
 # on __AVX2__ or the linker would fold mismatched GasPipe::advance bodies.
+# Kept outside the BUILD_TESTING block: a BUILD_TESTING=OFF build still links
+# the engine-sim library into the app and headless targets.
 if (ENGINE_SIM_AVX2 AND MSVC)
+    message(STATUS "ENGINE_SIM_AVX2: applying /arch:AVX2 to the simulation core targets")
     foreach(_avx2_target engine-sim engine-sim-script-interpreter engine-sim-headless engine-sim-app engine-sim-test)
         if (TARGET ${_avx2_target})
             target_compile_options(${_avx2_target} PRIVATE /arch:AVX2)
         endif()
     endforeach()
-endif()
+elseif (ENGINE_SIM_AVX2)
+    message(STATUS "ENGINE_SIM_AVX2: requested but not MSVC, /arch:AVX2 not applied")
 endif()

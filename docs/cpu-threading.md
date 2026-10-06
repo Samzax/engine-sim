@@ -83,18 +83,22 @@ run and barrier cost dominates everything else. Two lessons:
    pure loss - pulling 24 indices through one atomic per V12 substep cost more
    than the skew it could ever save - so they keep static slices. The default
    is `Static`; call sites opt into `Pull` per region shape.
-4. **Measure the imbalance before weighting the slices.** Static pipe and CFL
-   slices now split at cumulative *cell-count* quantiles (`parallelFor(count,
-   weights, fn)`), which is the right general shape for mixed pipe lengths.
-   Measured on both benchmark engines it is a mathematical no-op: every pipe
-   has exactly 8 cells (probe: hayabusa `8x8`, v12 `24x8`), so the weighted
-   cut lands on the same boundaries as the uniform cut, and an interleaved
+4. **Measure the imbalance before weighting the slices.** A weighted static
+   split (slices cut at cumulative *cell-count* quantiles, `parallelFor(count,
+   weights, fn)`) was built for mixed pipe lengths and measured on both
+   benchmark engines: it is a mathematical no-op, because every pipe has
+   exactly 8 cells (probe: hayabusa `8x8`, v12 `24x8`), so the weighted cut
+   lands on the same boundaries as the uniform cut, and an interleaved
    step2-vs-step3 A/B (6 pairs per engine) showed no difference beyond the
-   machine's +-5% noise. The remaining barrier wait is not slice skew - it is
-   the serial port chain (wall floor) plus the per-region fixed cost
+   machine's +-5% noise. Since it never diverged from the uniform cut and
+   nothing else consumed the weights, the weighted path was deleted (as was
+   the `m_pipeWeights` buffer it was fed from) rather than kept as a second
+   split policy. The remaining barrier wait is not slice skew - it is the
+   serial port chain (wall floor) plus the per-region fixed cost
    (~0.1-0.2 s of the profile's 0.13-0.16 barrier wall at most); fusing the
    three fluid regions would save that fixed cost but breaks the per-region
    profile buckets for an estimated 1-2%, so it was left alone.
+
 
 With profiling enabled (`ENGINE_SIM_PROFILE=ON`), the pool prints a barrier
 account at exit, e.g. `[sim] barrier: 1052480 calls, wall 0.155362s, ...` -
@@ -163,7 +167,8 @@ divides or sums - `aggregate` and every reduction fold stay scalar.
 Measured with interleaved run-by-run A/B against the scalar reference binary
 (medians of pairs, t8): hayabusa 0.390-0.400 vs 0.410-0.442, v12 0.426-0.434
 vs 0.447-0.454, i.e. roughly -5% wall on both engines at t8 and -8% at t1.
-The third planned step (weighted slices, above) added nothing measurable.
+The third planned step (weighted slices, above) added nothing measurable and
+the code path has since been removed as dead weight.
 
 ## Serial-work trims after threading
 

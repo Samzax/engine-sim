@@ -121,9 +121,17 @@ ES_GAS_DEFINITION void GasSystem::setVariableProperties(bool enabled) {
 }
 
 ES_GAS_NOINLINE_DEFINITION double GasSystem::temperature() const {
+#ifdef ENGINE_SIM_PROFILE
+    ++simulation_profile::thermo().tempQueries;
+#endif
     if (n() <= 0) return 0;
     if (!m_variableProperties) return kineticEnergy() / heatCapacity(300);
-    if (m_cachedEnergy == kineticEnergy() && m_cachedN == n()) return m_cachedTemperature;
+    if (m_cachedEnergy == kineticEnergy() && m_cachedN == n()) {
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().tempHits;
+#endif
+        return m_cachedTemperature;
+    }
     const double target = (std::max)(0.0, kineticEnergy() / n());
     double lower = 0, upper = (std::max)(6000.0, target / constants::R);
     double t = std::clamp(m_cachedTemperature, lower, upper);
@@ -803,12 +811,21 @@ ES_GAS_NOINLINE_DEFINITION double GasSystem::flow(double k_flow, double dt, doub
             }
         };
         GasSystem trial = *this;
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().trialCopies;
+#endif
         transfer(trial, amount);
         if ((trial.pressure() - P_env) * (pressure() - P_env) < 0) {
+#ifdef ENGINE_SIM_PROFILE
+            ++simulation_profile::thermo().bisectionCalls;
+#endif
             double low = 0, high = 1;
             for (int i = 0; i < 24; ++i) {
                 const double factor = (low+high)/2;
                 trial = *this;
+#ifdef ENGINE_SIM_PROFILE
+                ++simulation_profile::thermo().trialCopies;
+#endif
                 transfer(trial, amount*factor);
                 if ((trial.pressure()-P_env)*(pressure()-P_env) < 0) high = factor;
                 else low = factor;

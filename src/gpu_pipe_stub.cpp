@@ -6,8 +6,16 @@
 #include <stdexcept>
 namespace gpu_pipe {
 bool enabled() {
-    const char *value=std::getenv("ENGINE_SIM_GPU");
-    if (value && value[0]=='1')
+    // The environment is fixed at launch, so read it once. This is called from
+    // the innermost CFL substep loop (piston_engine_simulator.cpp), where a CRT
+    // getenv costs ~2 us per substep across the whole run. The throw below is
+    // deliberately kept outside the cached initialiser so it still fires on
+    // every call, exactly as before.
+    static const bool gpuRequested = [] {
+        const char *value=std::getenv("ENGINE_SIM_GPU");
+        return value && value[0]=='1';
+    }();
+    if (gpuRequested)
         throw std::runtime_error("ENGINE_SIM_GPU=1 requires a CUDA-enabled build");
     return false;
 }

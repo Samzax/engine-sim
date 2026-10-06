@@ -236,8 +236,13 @@ struct Context {
 Context &context(){thread_local Context instance; return instance;}
 }
 bool enabled() {
-    const char *value=std::getenv("ENGINE_SIM_GPU");
-    return value && value[0]=='1';
+    // Fixed at launch; cached so the CFL substep loop does not pay a CRT
+    // getenv per substep.
+    static const bool value=[] {
+        const char *env=std::getenv("ENGINE_SIM_GPU");
+        return env && env[0]=='1';
+    }();
+    return value;
 }
 const char *deviceName(){return enabled()?context().name:"CPU";}
 void advance(Pipe *pipes,int count,double dt) {
@@ -561,8 +566,14 @@ struct Context {
 };
 }
 bool requested() {
-    const char *value=std::getenv("ENGINE_SIM_GPU_COUPLED");
-    return value && value[0]=='1' && gpu_pipe::enabled();
+    // Fixed at launch; cached like gpu_pipe::enabled(). The short-circuit
+    // order is preserved: enabled() is still only consulted when the coupled
+    // variable itself is set.
+    static const bool value=[] {
+        const char *env=std::getenv("ENGINE_SIM_GPU_COUPLED");
+        return env && env[0]=='1';
+    }();
+    return value && gpu_pipe::enabled();
 }
 bool advance(Batch &b,double timestep,int fluidSteps) {
     if(!(timestep>0) || !std::isfinite(timestep) || fluidSteps<1 || fluidSteps>10000

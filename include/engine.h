@@ -45,6 +45,7 @@ class Engine : public Part {
             LubricationModel::Parameters lubrication;
             int pipeCells = 8;
             double pipeFrictionFactor = 0.02;
+            int fluidSteps = 8;
 
             Throttle *throttle;
 
@@ -155,6 +156,7 @@ class Engine : public Part {
         double m_initialHighFrequencyGain;
         double m_initialNoise;
         double m_initialJitter;
+        int m_fluidSteps = 8;
 
         ExhaustSystem *m_exhaustSystems;
         int m_exhaustSystemCount;

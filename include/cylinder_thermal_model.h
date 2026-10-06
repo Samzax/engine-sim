@@ -40,6 +40,9 @@ public:
 
     ES_GAS_FUNCTION void exchange(GasSystem &gas, double area, double meanPistonSpeed, double dt) {
         if (dt <= 0) return;
+#ifdef ENGINE_SIM_PROFILE
+        ++simulation_profile::thermo().exchangeCalls;
+#endif
         if (!m_parameters.enabled) {
             gas.changeEnergy((363.15 - gas.temperature()) * area * 100.0 * dt);
             return;
@@ -58,6 +61,9 @@ public:
             double high = (std::max)((std::max)(tg, oldWall), m_parameters.coolantTemperature);
             double t = tg;
             for (int i = 0; i < 32; ++i) {
+#ifdef ENGINE_SIM_PROFILE
+                ++simulation_profile::thermo().exchangeIters;
+#endif
                 const double delta = gas.energyAtTemperature(t) - initialEnergy;
                 const double wall = (cw*oldWall + gc*m_parameters.coolantTemperature - delta)/(cw+gc);
                 const double residual = delta - gh*(wall-t);

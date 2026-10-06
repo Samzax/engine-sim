@@ -73,7 +73,6 @@ class PistonEngineSimulator : public Simulator {
 
         int m_fluidSimulationSteps;
         std::vector<GasPipe *> m_pipes;
-        std::vector<int> m_pipeWeights;
         std::vector<double> m_cflScratch;
         bool m_portsRegionMerged=false;
         unsigned long long m_coupledGpuSteps=0,m_coupledGpuFallbacks=0;

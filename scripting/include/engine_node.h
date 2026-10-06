@@ -238,6 +238,7 @@ namespace es_script {
             addInput("fuel", &m_fuel, InputTarget::Type::Object);
             addInput("throttle", &m_throttle, InputTarget::Type::Object);
             addInput("simulation_frequency", &m_parameters.initialSimulationFrequency);
+            addInput("fluid_steps", &m_parameters.fluidSteps);
             addInput("hf_gain", &m_parameters.initialHighFrequencyGain);
             addInput("jitter", &m_parameters.initialJitter);
             addInput("noise", &m_parameters.initialNoise);
